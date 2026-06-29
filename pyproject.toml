@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sprint-cert-automation"
+version = "0.1.0"
+description = "Generate sprint certification .xlsm files from forecast workbook"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "openpyxl==3.1.5",
+  "pyyaml==6.0.2",
+  "pywin32==312"
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

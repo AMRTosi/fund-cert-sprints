@@ -1,0 +1,21 @@
+# Copy this file to mapping.local.yaml and adapt to your real workbook fields.
+
+forecast:
+  valid_sheet_prefix: "FY"
+  teams_row_map:
+    1: "Bonificaciones"
+    2: "Subvenciones"
+    3: "Fondos de Reserva MRR"
+    4: "AccentureTransversal"
+
+template:
+  config_sheet: "Config"
+  cells:
+    start_date: "A2"
+    end_date: "B2"
+    sprint_number: "B5"
+  team_table:
+    start_row: 14
+
+hours:
+  day_hours: 8.5

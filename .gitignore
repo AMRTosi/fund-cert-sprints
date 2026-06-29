@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+output/
+*.zip
+certificaciones/
+certificaciones/**
+*.egg-info/
+~$*.xlsx
+~$*.xlsm
