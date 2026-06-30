@@ -20,11 +20,9 @@ def generate_certificates(
         forecast_path=forecast_path,
         template_path=template_path,
     )
-    zip_name = f"certificaciones_{year:04d}_{month:02d}.zip"
     return service.run(
         year=year,
         month=month,
         output_dir=output_dir,
-        zip_name=zip_name,
         dry_run=dry_run,
     )

@@ -45,7 +45,6 @@ def main() -> int:
     print(f"Generated files: {len(result.generated_files)}")
     for file_path in result.generated_files:
         print(f" - {file_path}")
-    print(f"ZIP: {result.zip_path}")
 
     return 0
 
