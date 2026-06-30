@@ -9,3 +9,9 @@ certificaciones/**
 *.egg-info/
 ~$*.xlsx
 ~$*.xlsm
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+inputs/
+!inputs/.gitkeep

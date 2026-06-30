@@ -54,13 +54,15 @@ cd cert_automation
 5. Run monthly generation in dry-run mode first:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli \
-  --forecast "../Fundae_Forecast_Copilot.xlsx" \
-  --template "../plantilla de Inf_Certificacion 20251.xlsm" \
-  --year 2026 \
-  --month 6 \
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
+  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --year 2026 `
+  --month 6 `
   --dry-run
 ```
+
+Important: `--dry-run` does not write files. It only validates inputs and shows planned output paths.
 
 Output path is fixed to:
 
@@ -73,10 +75,10 @@ For the command above, output folder is:
 6. Run real generation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli \
-  --forecast "../Fundae_Forecast_Copilot.xlsx" \
-  --template "../plantilla de Inf_Certificacion 20251.xlsm" \
-  --year 2026 \
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
+  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --year 2026 `
   --month 6
 ```
 
@@ -106,27 +108,28 @@ The editable install is required so `python -m sprint_cert_automation.cli` resol
 4. Run monthly generation (dry-run first):
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli \
-  --forecast "../Fundae_Forecast_Copilot.xlsx" \
-  --template "../plantilla de Inf_Certificacion 20251.xlsm" \
-  --year 2026 \
-  --month 6 \
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
+  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --year 2026 `
+  --month 6 `
   --dry-run
 ```
 
 5. Run real generation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli \
-  --forecast "../Fundae_Forecast_Copilot.xlsx" \
-  --template "../plantilla de Inf_Certificacion 20251.xlsm" \
-  --year 2026 \
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
+  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --year 2026 `
   --month 6
 ```
 
 ## Notes
 
-- Forecast and template are expected one level above `cert_automation` in the current workspace.
+- Keep sensitive forecast/template files inside `cert_automation/inputs/`.
+- `inputs/` and all Excel extensions (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`) are ignored by Git.
 - The process never modifies the forecast source workbook.
 - If generation fails due to missing FY sheet names, verify year/month and workbook tabs.
 - Generated files are always written under `cert_automation/certificaciones/<YYYY-MM>`.
