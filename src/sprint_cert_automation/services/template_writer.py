@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import copy
+from datetime import datetime, time
+import os
 from pathlib import Path
 from shutil import copy2
 import unicodedata
@@ -39,6 +41,18 @@ class TemplateWriter:
         self.template_path = template_path
 
     def write(self, draft: CertificateDraft, output_path: Path) -> None:
+        if self._should_use_com():
+            self._write_with_com(draft, output_path)
+            return
+
+        self._write_with_openpyxl(draft, output_path)
+
+    def _should_use_com(self) -> bool:
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            return False
+        return os.name == "nt"
+
+    def _write_with_openpyxl(self, draft: CertificateDraft, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         copy2(self.template_path, output_path)
 
@@ -55,6 +69,128 @@ class TemplateWriter:
             if vba_archive is not None:
                 vba_archive.close()
             workbook.close()
+
+    def _write_with_com(self, draft: CertificateDraft, output_path: Path) -> None:
+        try:
+            import win32com.client  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError("pywin32 is required for Excel COM automation") from exc
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        copy2(self.template_path, output_path)
+
+        excel = win32com.client.DispatchEx("Excel.Application")
+        excel.Visible = False
+        excel.DisplayAlerts = False
+
+        workbook = None
+        try:
+            workbook = excel.Workbooks.Open(str(output_path.resolve()))
+            worksheet = workbook.Worksheets(CONFIG_SHEET)
+            self._write_config_com(worksheet, draft)
+            self._write_holidays_com(worksheet, draft)
+            valid_categories = self._valid_categories_com(workbook)
+            self._write_workloads_com(worksheet, draft, valid_categories)
+            workbook.Save()
+        finally:
+            if workbook is not None:
+                workbook.Close(SaveChanges=True)
+            excel.Quit()
+
+    def _write_config_com(self, worksheet, draft: CertificateDraft) -> None:
+        worksheet.Range("A2").Value = self._to_excel_date(draft.start_date)
+        worksheet.Range("B2").Value = self._to_excel_date(draft.end_date)
+        worksheet.Range("D2").Value = self._display_sprint_id(draft)
+        worksheet.Range("G3").Value = self._product_label(draft)
+
+    def _write_holidays_com(self, worksheet, draft: CertificateDraft) -> None:
+        table = worksheet.ListObjects(HOLIDAY_TABLE)
+        data_range = table.DataBodyRange
+        if data_range is not None:
+            capacity = data_range.Rows.Count
+            if len(draft.holidays) > capacity:
+                raise ValueError(
+                    f"Template table '{HOLIDAY_TABLE}' has capacity {capacity}, "
+                    f"but {len(draft.holidays)} holidays were provided"
+                )
+            data_range.ClearContents()
+        elif draft.holidays:
+            raise ValueError(f"Template table '{HOLIDAY_TABLE}' has no data rows to write holidays")
+
+        start_row = table.HeaderRowRange.Row + 1
+        start_col = table.HeaderRowRange.Column
+        for offset, holiday in enumerate(draft.holidays):
+            row = start_row + offset
+            worksheet.Cells(row, start_col).Value = holiday.label
+            worksheet.Cells(row, start_col + 1).Value = self._format_date_ddmmyyyy(holiday.holiday_date)
+
+    def _write_workloads_com(self, worksheet, draft: CertificateDraft, valid_categories: list[str]) -> None:
+        table = worksheet.ListObjects(TEAM_TABLE)
+        unique_workloads = self._dedupe_workloads(draft)
+        data_range = table.DataBodyRange
+        if data_range is not None:
+            capacity = data_range.Rows.Count
+            if len(unique_workloads) > capacity:
+                raise ValueError(
+                    f"Template table '{TEAM_TABLE}' has capacity {capacity}, "
+                    f"but {len(unique_workloads)} workloads were provided"
+                )
+            data_range.ClearContents()
+        elif unique_workloads:
+            raise ValueError(f"Template table '{TEAM_TABLE}' has no data rows to write workloads")
+
+        start_row = table.HeaderRowRange.Row + 1
+        start_col = table.HeaderRowRange.Column
+        for offset, workload in enumerate(unique_workloads):
+            row = start_row + offset
+            worksheet.Cells(row, start_col).Value = workload.member.name
+            worksheet.Cells(row, start_col + 1).Value = workload.member.billing_line
+            worksheet.Cells(row, start_col + 2).Value = self._resolve_category(
+                workload.member.category,
+                valid_categories,
+            )
+            worksheet.Cells(row, start_col + 3).Value = workload.sprint_hours
+            worksheet.Cells(row, start_col + 4).Value = workload.free_hours
+
+    def _valid_categories_com(self, workbook) -> list[str]:
+        for worksheet in workbook.Worksheets:
+            try:
+                table = worksheet.ListObjects(PROFILE_TABLE)
+            except Exception:
+                continue
+
+            header_row = table.HeaderRowRange.Row
+            first_col = table.HeaderRowRange.Column
+            last_col = table.Range.Column + table.Range.Columns.Count - 1
+            last_row = table.Range.Row + table.Range.Rows.Count - 1
+
+            category_column = None
+            for column in range(first_col, last_col + 1):
+                header = worksheet.Cells(header_row, column).Value
+                if isinstance(header, str) and header.strip().casefold() == "categoria":
+                    category_column = column
+                    break
+            if category_column is None:
+                continue
+
+            categories: list[str] = []
+            for row in range(header_row + 1, last_row + 1):
+                value = worksheet.Cells(row, category_column).Value
+                if value is None:
+                    continue
+                label = str(value).strip()
+                if label and label not in categories:
+                    categories.append(label)
+            if categories:
+                return categories
+
+        raise ValueError("Could not resolve category dropdown options from template")
+
+    def _to_excel_date(self, value) -> datetime:
+        return datetime.combine(value, time.min)
+
+    def _format_date_ddmmyyyy(self, value) -> str:
+        return f"{value.day:02d}-{value.month:02d}-{value.year:04d}"
 
     def _write_config(self, worksheet, draft: CertificateDraft) -> None:
         worksheet["A2"] = draft.start_date
