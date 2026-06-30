@@ -122,7 +122,7 @@ class TemplateWriter:
         for offset, holiday in enumerate(draft.holidays):
             row = start_row + offset
             worksheet.Cells(row, start_col).Value = holiday.label
-            worksheet.Cells(row, start_col + 1).Value = self._to_excel_date(holiday.holiday_date)
+            worksheet.Cells(row, start_col + 1).Value = self._format_date_ddmmyyyy(holiday.holiday_date)
 
     def _write_workloads_com(self, worksheet, draft: CertificateDraft, valid_categories: list[str]) -> None:
         table = worksheet.ListObjects(TEAM_TABLE)
@@ -188,6 +188,9 @@ class TemplateWriter:
 
     def _to_excel_date(self, value) -> datetime:
         return datetime.combine(value, time.min)
+
+    def _format_date_ddmmyyyy(self, value) -> str:
+        return f"{value.day:02d}-{value.month:02d}-{value.year:04d}"
 
     def _write_config(self, worksheet, draft: CertificateDraft) -> None:
         worksheet["A2"] = draft.start_date
