@@ -56,7 +56,7 @@ cd cert_automation
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --template "./inputs/plantilla de Inf_Certificacion 2025.xltm" `
   --year 2026 `
   --month 6 `
   --dry-run
@@ -77,7 +77,7 @@ For the command above, output folder is:
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --template "./inputs/plantilla de Inf_Certificacion 2025.xltm" `
   --year 2026 `
   --month 6
 ```
@@ -108,20 +108,20 @@ The editable install is required so `python -m sprint_cert_automation.cli` resol
 4. Run monthly generation (dry-run first):
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+.\venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --template "./inputs/plantilla de Inf_Certificacion 2025.xltm" `
   --year 2026 `
   --month 6 `
   --dry-run
 ```
 
-5. Run real generation:
+6. Run real generation:
 
 ```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
+.\venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
+  --template "./inputs/plantilla de Inf_Certificacion 2025.xltm" `
   --year 2026 `
   --month 6
 ```

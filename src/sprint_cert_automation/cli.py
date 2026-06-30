@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Generate sprint certification files for target month",
     )
     parser.add_argument("--forecast", required=True, type=Path, help="Forecast workbook path")
-    parser.add_argument("--template", required=True, type=Path, help="Template workbook path")
+    parser.add_argument("--template", required=True, type=Path, help="Template workbook path (.xltm)")
     parser.add_argument("--year", type=int, default=None, help="Target year")
     parser.add_argument("--month", type=int, default=None, help="Target month 1..12")
     parser.add_argument("--dry-run", action="store_true", help="Run without writing files")
