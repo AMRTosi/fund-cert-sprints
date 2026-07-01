@@ -90,7 +90,7 @@ For the command above, output folder is:
   --month 6
 ```
 
-This command scans `certificaciones/YYYY-MM` and writes a `.pdf` with the same base name next to each validated `.xlsm`.
+This command scans `certificaciones/YYYY-MM`, executes macro `SELECCIONAR_HOJAS_INFORME` in each `.xlsm`, and writes a `.pdf` with the same base name next to each workbook using the resulting selected sheets.
 
 ## Quick start (first run)
 
@@ -136,7 +136,7 @@ The editable install is required so `python -m sprint_cert_automation.cli` resol
   --month 6
 ```
 
-6. Run post-validation PDF export after you execute any needed workbook macros manually:
+6. Run post-validation PDF export:
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
@@ -226,18 +226,18 @@ Fix:
 ### 8) Macro export fails with "Cannot run the macro"
 
 Cause:
-- The workbook still needs manual preparation before PDF export.
+- Macro security settings or macro name do not allow execution from COM.
 
 Fix:
-- Open the validated `.xlsm` in Excel.
-- Perform the manual macro or sheet-selection step you need.
-- Save the workbook.
-- Run `export-pdf` afterwards to create the PDF.
+- Confirm macro `SELECCIONAR_HOJAS_INFORME` exists in the generated workbook.
+- Ensure the workbook is in a trusted location and macros are enabled.
+- If needed, pass an explicit macro name:
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
   --year 2026 `
-  --month 6
+  --month 6 `
+  --macro-name "SELECCIONAR_HOJAS_INFORME"
 ```
 
 ### 7) Warnings from `openpyxl` about unsupported extensions

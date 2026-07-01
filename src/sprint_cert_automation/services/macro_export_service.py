@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sprint_cert_automation.infrastructure.excel_com import ExcelComClient
+from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME, ExcelComClient
 
 
 @dataclass
@@ -14,6 +14,9 @@ class MacroExportResult:
 
 
 class MacroExportService:
+    def __init__(self, macro_name: str = DEFAULT_EXPORT_MACRO_NAME) -> None:
+        self._macro_name = macro_name
+
     def run(
         self,
         input_dir: Path,
@@ -41,6 +44,8 @@ class MacroExportService:
                 pdf_path = workbook_path.with_suffix(".pdf")
                 try:
                     workbook = client.open_workbook(workbook_path)
+                    client.run_workbook_macro(workbook, self._macro_name)
+                    workbook.Save()
                     client.export_workbook_to_pdf(workbook, pdf_path)
                     result.exported_files.append(pdf_path)
                 except Exception as exc:

@@ -13,8 +13,9 @@ def test_cli_export_pdf_uses_month_folder_and_macro(monkeypatch, tmp_path: Path)
         captured["month"] = month
         return tmp_path
 
-    def fake_export(input_dir: Path, dry_run: bool):
+    def fake_export(input_dir: Path, macro_name: str, dry_run: bool):
         captured["input_dir"] = input_dir
+        captured["macro_name"] = macro_name
         captured["dry_run"] = dry_run
 
         class Result:
@@ -33,6 +34,7 @@ def test_cli_export_pdf_uses_month_folder_and_macro(monkeypatch, tmp_path: Path)
     assert captured["year"] == 2026
     assert captured["month"] == 6
     assert captured["input_dir"] == tmp_path
+    assert captured["macro_name"] == "SELECCIONAR_HOJAS_INFORME"
     assert captured["dry_run"] is True
 
 

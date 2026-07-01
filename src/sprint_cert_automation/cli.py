@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 
 from sprint_cert_automation.app import export_certificates_to_pdf, generate_certificates
+from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.utils.dates import today_year_month
 
 
@@ -25,6 +26,12 @@ def _add_export_pdf_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input-dir", type=Path, default=None, help="Folder with validated .xlsm files")
     parser.add_argument("--year", type=int, default=None, help="Target year for default folder")
     parser.add_argument("--month", type=int, default=None, help="Target month 1..12 for default folder")
+    parser.add_argument(
+        "--macro-name",
+        type=str,
+        default=DEFAULT_EXPORT_MACRO_NAME,
+        help="Macro to execute before selecting sheets and exporting PDF",
+    )
     parser.add_argument("--dry-run", action="store_true", help="List files without executing macro/export")
 
 
@@ -89,6 +96,7 @@ def _run_export_pdf(args: argparse.Namespace) -> int:
     input_dir = args.input_dir if args.input_dir is not None else default_output_dir(year, month)
     result = export_certificates_to_pdf(
         input_dir=input_dir,
+        macro_name=args.macro_name,
         dry_run=args.dry_run,
     )
 

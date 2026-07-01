@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.services.certificate_service import (
     CertificateGenerationService,
     GenerationResult,
@@ -31,9 +32,10 @@ def generate_certificates(
 
 def export_certificates_to_pdf(
     input_dir: Path,
+    macro_name: str = DEFAULT_EXPORT_MACRO_NAME,
     dry_run: bool = False,
 ) -> MacroExportResult:
-    service = MacroExportService()
+    service = MacroExportService(macro_name=macro_name)
     return service.run(
         input_dir=input_dir,
         dry_run=dry_run,

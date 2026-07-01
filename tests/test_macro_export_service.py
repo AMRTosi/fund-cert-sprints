@@ -40,6 +40,10 @@ def test_macro_export_service_runs_macro_and_exports_pdf(monkeypatch, tmp_path: 
     class FakeWorkbook:
         def __init__(self, path: Path) -> None:
             self.path = path
+            self.Name = path.name
+
+        def Save(self) -> None:
+            events.append(("save", self.path.name, ""))
 
         def Close(self, SaveChanges=True) -> None:  # noqa: N803
             events.append(("close", self.path.name, str(SaveChanges)))
@@ -54,15 +58,20 @@ def test_macro_export_service_runs_macro_and_exports_pdf(monkeypatch, tmp_path: 
         def open_workbook(self, workbook_path: Path):
             return FakeWorkbook(workbook_path)
 
+        def run_workbook_macro(self, workbook, macro_name: str) -> None:
+            events.append(("macro", workbook.Name, macro_name))
+            if workbook.Name == "B.xlsm":
+                raise RuntimeError("macro failure")
+
         def export_workbook_to_pdf(self, workbook, output_path: Path) -> None:
             events.append(("pdf", workbook.path.name, output_path.name))
-            if workbook.path.name == "B.xlsm":
-                raise RuntimeError("pdf failure")
 
     monkeypatch.setattr(macro_export_service, "ExcelComClient", FakeExcelComClient)
 
     result = MacroExportService().run(input_dir=tmp_path)
 
     assert result.exported_files == [tmp_path / "A.pdf"]
-    assert result.errors == {second: "pdf failure"}
+    assert result.errors == {second: "macro failure"}
+    assert ("macro", "A.xlsm", "SELECCIONAR_HOJAS_INFORME") in events
+    assert ("save", "A.xlsm", "") in events
     assert ("pdf", "A.xlsm", "A.pdf") in events
