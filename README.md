@@ -82,6 +82,16 @@ For the command above, output folder is:
   --month 6
 ```
 
+7. After manual visual validation, execute macro + PDF export:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6
+```
+
+This command scans `certificaciones/YYYY-MM` and writes a `.pdf` with the same base name next to each validated `.xlsm`.
+
 ## Quick start (first run)
 
 1. Create and populate local virtual environment in `cert_automation/.venv`:
@@ -124,6 +134,23 @@ The editable install is required so `python -m sprint_cert_automation.cli` resol
   --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
   --year 2026 `
   --month 6
+```
+
+6. Run post-validation PDF export after you execute any needed workbook macros manually:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6
+```
+
+Optional dry-run:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6 `
+  --dry-run
 ```
 
 ## Notes
@@ -195,6 +222,23 @@ Cause:
 Fix:
 - Remove `-OutputDir` from your manual calls.
 - Keep using `--year` and `--month` to control destination subfolder.
+
+### 8) Macro export fails with "Cannot run the macro"
+
+Cause:
+- The workbook still needs manual preparation before PDF export.
+
+Fix:
+- Open the validated `.xlsm` in Excel.
+- Perform the manual macro or sheet-selection step you need.
+- Save the workbook.
+- Run `export-pdf` afterwards to create the PDF.
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6
+```
 
 ### 7) Warnings from `openpyxl` about unsupported extensions
 

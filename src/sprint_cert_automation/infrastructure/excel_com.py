@@ -33,3 +33,24 @@ class ExcelComClient:
             wb.SaveAs(str(output_path.resolve()))
         finally:
             wb.Close(SaveChanges=True)
+
+    def open_workbook(self, workbook_path: Path):
+        if self._app is None:
+            raise RuntimeError("ExcelComClient is not open")
+        return self._app.Workbooks.Open(str(workbook_path.resolve()))
+
+    def export_workbook_to_pdf(self, workbook, output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            selected_sheets = workbook.Windows(1).SelectedSheets
+            try:
+                selected_sheet_names = [
+                    selected_sheets.Item(index).Name for index in range(1, selected_sheets.Count + 1)
+                ]
+            except Exception:
+                selected_sheet_names = [selected_sheets.Name]
+
+            workbook.Worksheets(selected_sheet_names).Select()
+            workbook.ActiveSheet.ExportAsFixedFormat(0, str(output_path.resolve()))
+        except Exception:
+            workbook.ExportAsFixedFormat(0, str(output_path.resolve()))
