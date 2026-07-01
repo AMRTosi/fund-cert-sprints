@@ -82,6 +82,16 @@ For the command above, output folder is:
   --month 6
 ```
 
+7. After manual visual validation, execute macro + PDF export:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6
+```
+
+This command scans `certificaciones/YYYY-MM`, executes macro `SELECCIONAR_HOJAS_INFORME` in each `.xlsm`, and writes a `.pdf` with the same base name next to each workbook using the resulting selected sheets.
+
 ## Quick start (first run)
 
 1. Create and populate local virtual environment in `cert_automation/.venv`:
@@ -124,6 +134,23 @@ The editable install is required so `python -m sprint_cert_automation.cli` resol
   --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
   --year 2026 `
   --month 6
+```
+
+6. Run post-validation PDF export:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6
+```
+
+Optional dry-run:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6 `
+  --dry-run
 ```
 
 ## Notes
@@ -195,6 +222,23 @@ Cause:
 Fix:
 - Remove `-OutputDir` from your manual calls.
 - Keep using `--year` and `--month` to control destination subfolder.
+
+### 8) Macro export fails with "Cannot run the macro"
+
+Cause:
+- Macro security settings or macro name do not allow execution from COM.
+
+Fix:
+- Confirm macro `SELECCIONAR_HOJAS_INFORME` exists in the generated workbook.
+- Ensure the workbook is in a trusted location and macros are enabled.
+- If needed, pass an explicit macro name:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
+  --year 2026 `
+  --month 6 `
+  --macro-name "SELECCIONAR_HOJAS_INFORME"
+```
 
 ### 7) Warnings from `openpyxl` about unsupported extensions
 
