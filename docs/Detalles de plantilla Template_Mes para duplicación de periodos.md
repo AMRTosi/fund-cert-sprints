@@ -4,6 +4,8 @@ Explicación de la lógica de la pestaña Template_Mes, la cual se usa como base
 La pestaña Template_Mes se usa como plantilla de base para adaptar los periodos / meses que vamos facturando a nuestro cliente. El servicio se divide en 4 equipos: Bonificaciones, Subvenciones, Fondos de Reserva y Transversal. Cada uno de ellos lleva su propia planificación y ejecución de sprints, y los ciclos de facturación no se producen a nivel de mes, sino a nivel de finalización de sprint: Se podrá facturar mensualmente, todos los sprints que finalicen en el mes, aquellos que finalicen en el mes siguiente no se podrán facturar y se harán en el siguiente periodo. Es por eso que necesitamos controlar las horas de sprints finalizados en meses anteriores, horas que finalizan en sprints durante el mes, y horas de sprints que no se pueden facturar durante el mes de la pestaña en cuestión.
 
 ## Reglas para calcular los sprints.
+El nombre de cada sprint se representa con el texto del nombre del equipo seguido del acrónimo SP y el número del sprint que se incrementa en 1 (secuencial). Por ejemplo: Subvenciones-SP240, FdR-SP70. En el caso del equipo transversal, se indica el mes en curso, por ejemplo: Transversal-enero
+
 Cada equipo tiene su criterio para organizar los sprints, teniendo en cuenta que solo consideramos días laborables de lunes a viernes:
 - Bonificaciones: Duración de 10 días laborables empezando en martes y finalizando en lunes.
 - Subvenciones: Duración de 16 días laborables.
