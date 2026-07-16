@@ -1,7 +1,10 @@
 ## Descripción general de la pestaña Template_Mes
-Explicación de la lógica de la pestaña Template_Mes, la cual se usa como base para la creación de nuevos periodos de facturación por mes y con la que se controlan las horas por trabajador, tanto de coste como horas facturables.
+Explicación de la lógica del documento excel Forecast y de la pestaña Template_Mes, la cual se usa como base para la creación de nuevos periodos de facturación por mes y con la que se controlan las horas por trabajador, tanto de coste como horas facturables.
 
 La pestaña Template_Mes se usa como plantilla de base para adaptar los periodos / meses que vamos facturando a nuestro cliente. El servicio se divide en 4 equipos: Bonificaciones, Subvenciones, Fondos de Reserva y Transversal. Cada uno de ellos lleva su propia planificación y ejecución de sprints, y los ciclos de facturación no se producen a nivel de mes, sino a nivel de finalización de sprint: Se podrá facturar mensualmente, todos los sprints que finalicen en el mes, aquellos que finalicen en el mes siguiente no se podrán facturar y se harán en el siguiente periodo. Es por eso que necesitamos controlar las horas de sprints finalizados en meses anteriores, horas que finalizan en sprints durante el mes, y horas de sprints que no se pueden facturar durante el mes de la pestaña en cuestión.
+
+## Nombre de las pestañas
+El documento excel mantiene histórico de todos los periodos. Los nombres de las pestañas relacionadas con la facturación mensual empiezan con las siglas FY_ , acrónimo de Fiscal Year. Los años fiscales usan el sistema americano, el cual empieza el 1 de septiembre y finaliza el 31 de agosto de cada año natural. Por ejemplo FY27_sept representa el mes septiembre de 2026.
 
 ## Reglas para calcular los sprints.
 El nombre de cada sprint se representa con el texto del nombre del equipo seguido del acrónimo SP y el número del sprint que se incrementa en 1 (secuencial). Por ejemplo: Subvenciones-SP240, FdR-SP70. En el caso del equipo transversal, se indica el mes en curso, por ejemplo: Transversal-enero
@@ -11,6 +14,8 @@ Cada equipo tiene su criterio para organizar los sprints, teniendo en cuenta que
 - Subvenciones: Duración de 16 días laborables.
 - Fondos de Reserva: Divide el mes en dos sprints: del 1 al 15 del mes (ambos incluídos) y del 16 al último día del mes (ambos incluídos) por lo que este equipo siempre podrá facturar el 100% de las horas en el periodo que se ejecute.
 - Transversales: un único sprint que abarca del 1 al último dia del mes (ambos incluídos) por lo que este equipo siempre podrá facturar el 100% de las horas en el periodo que se ejecute.
+
+Si los sprints de cualquiera de los equipos finalizan fuera del mes, se representan con un relleno con estilo rayado. 
 
 ## Principales tablas para entender la estructura del documento:
 ### T_NOMBRE_EMPLEADO_COSTE Y T_NOMBRE_EMPLEADO_REVENUE
