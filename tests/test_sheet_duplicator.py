@@ -15,8 +15,12 @@ from sprint_cert_automation.services.sheet_duplicator import (
     DAY_LETTER_ROW,
     DAY_NUMBER_ROW,
     FIRST_DAY_COL,
+    MAX_DAY_COL,
     REVENUE_FIRST_ROW,
     REVENUE_LAST_ROW,
+    _find_gap_anterior_columns,
+    _find_prev_hatched_col_range,
+    _find_team_column,
     _generate_calendar,
     _is_gray_fill,
     _replace_column_in_formula,
@@ -24,6 +28,7 @@ from sprint_cert_automation.services.sheet_duplicator import (
     fill_empty_cost_cells,
     remove_gray_fills,
     update_calendar,
+    update_gap_anterior_formulas,
 )
 
 
@@ -549,3 +554,309 @@ class TestDuplicateSheetCli:
         assert captured["year"] == 2026
         assert captured["month"] == 12
         assert captured["dry_run"] is True
+
+
+# ---------------------------------------------------------------------------
+# Gap Mes Anterior formula tests
+# ---------------------------------------------------------------------------
+
+
+def _create_prev_sheet_with_hatched_sprints(wb, name, year, month,
+                                             bonif_hatched_range=None,
+                                             subv_hatched_range=None):
+    """Create a previous period sheet with optional hatched tail sprints."""
+    from sprint_cert_automation.services.sprint_configurator import (
+        BONIF_HATCHED_FILL,
+        BONIF_SOLID_FILL,
+        SUBV_HATCHED_FILL,
+        SUBV_SOLID_FILL,
+        FDR_SOLID_FILL,
+        TRANSV_SOLID_FILL,
+    )
+
+    ws = wb.create_sheet(name)
+    # Set up calendar row 5 (day numbers)
+    import calendar as cal_mod
+    num_days = cal_mod.monthrange(year, month)[1]
+    for day in range(1, num_days + 1):
+        ws.cell(row=DAY_NUMBER_ROW, column=FIRST_DAY_COL + day - 1, value=day)
+
+    def _write_segment(row, start_day, end_day, label, fill):
+        start_col = FIRST_DAY_COL + start_day - 1
+        end_col = FIRST_DAY_COL + end_day - 1
+        cell = ws.cell(row=row, column=start_col)
+        cell.value = label
+        cell.fill = fill
+        for c in range(start_col + 1, end_col + 1):
+            ws.cell(row=row, column=c).fill = fill
+        if end_col > start_col:
+            ws.merge_cells(
+                start_row=row, start_column=start_col,
+                end_row=row, end_column=end_col)
+
+    # Bonificaciones (row 1)
+    if bonif_hatched_range:
+        h_start, h_end = bonif_hatched_range
+        if h_start > 1:
+            _write_segment(1, 1, h_start - 1, "SP263", BONIF_SOLID_FILL)
+        _write_segment(1, h_start, h_end, "SP264", BONIF_HATCHED_FILL)
+    else:
+        _write_segment(1, 1, num_days, "SP263", BONIF_SOLID_FILL)
+
+    # Subvenciones (row 2)
+    if subv_hatched_range:
+        h_start, h_end = subv_hatched_range
+        if h_start > 1:
+            _write_segment(2, 1, h_start - 1, "SP206", SUBV_SOLID_FILL)
+        _write_segment(2, h_start, h_end, "SP207", SUBV_HATCHED_FILL)
+    else:
+        _write_segment(2, 1, num_days, "SP206", SUBV_SOLID_FILL)
+
+    # FdR and Transversal always complete in-month
+    _write_segment(3, 1, num_days, "FdR Sprint 1", FDR_SOLID_FILL)
+    _write_segment(4, 1, num_days, "TRANSVERSAL", TRANSV_SOLID_FILL)
+
+    return ws
+
+
+def _create_sheet_with_gap_cols(wb, name, gap_col, gap_factura_col=None):
+    """Create a sheet with Gap Mes Anterior column(s) and team column."""
+    ws = wb.create_sheet(name)
+
+    # Set up calendar
+    for day in range(1, 32):
+        ws.cell(row=DAY_NUMBER_ROW, column=FIRST_DAY_COL + day - 1, value=day)
+
+    # Team column at F (like Template_Mes)
+    ws.cell(row=DAY_LETTER_ROW, column=6, value="Equipo")
+
+    # Tarifa column at G
+    ws.cell(row=DAY_LETTER_ROW, column=7, value="Tarifa")
+
+    # Set team names for rows 7-9
+    teams = ["Transversal", "Bonificaciones", "Subvenciones"]
+    for i, team in enumerate(teams):
+        ws.cell(row=COST_FIRST_ROW + i, column=6, value=team)
+        ws.cell(row=COST_FIRST_ROW + i, column=7, value=50)  # tarifa rate
+
+    # Gap Mes Anterior header
+    ws.cell(row=DAY_LETTER_ROW, column=gap_col, value="Gap Mes Anterior")
+
+    if gap_factura_col:
+        ws.cell(row=DAY_LETTER_ROW, column=gap_factura_col, value="Gap Mes Anterior")
+
+    return ws
+
+
+class TestFindTeamColumn:
+    def test_finds_equipo_header(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=6, value="Equipo")
+        assert _find_team_column(ws) == "F"
+
+    def test_finds_equipo_at_col_e(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=5, value="Equipo")
+        assert _find_team_column(ws) == "E"
+
+    def test_fallback_to_data_rows(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=COST_FIRST_ROW, column=4, value="Transversal")
+        assert _find_team_column(ws) == "D"
+
+    def test_default_when_no_team(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        assert _find_team_column(ws) == "F"
+
+
+class TestFindGapAnteriorColumns:
+    def test_finds_single_gap_col(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=52, value="Gap Mes Anterior")
+        assert _find_gap_anterior_columns(ws) == [52]
+
+    def test_finds_two_gap_cols(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=49, value="Gap Mes Anterior")
+        ws.cell(row=DAY_LETTER_ROW, column=55, value="Gap Mes Anterior")
+        assert _find_gap_anterior_columns(ws) == [49, 55]
+
+    def test_no_gap_cols(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        assert _find_gap_anterior_columns(ws) == []
+
+
+class TestFindPrevHatchedColRange:
+    def test_bonif_hatched_tail(self):
+        wb = openpyxl.Workbook()
+        ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "prev", 2026, 10, bonif_hatched_range=(28, 31))
+        result = _find_prev_hatched_col_range(ws, "bonificaciones")
+        assert result is not None
+        start_l, end_l = result
+        # Day 28 → col 13+27=40 → AN, Day 31 → col 13+30=43 → AQ
+        assert start_l == "AN"
+        assert end_l == "AQ"
+
+    def test_subv_hatched_tail(self):
+        wb = openpyxl.Workbook()
+        ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "prev", 2026, 10, subv_hatched_range=(29, 31))
+        result = _find_prev_hatched_col_range(ws, "subvenciones")
+        assert result is not None
+        start_l, end_l = result
+        # Day 29 → col 13+28=41 → AO, Day 31 → col 13+30=43 → AQ
+        assert start_l == "AO"
+        assert end_l == "AQ"
+
+    def test_no_hatched_tail(self):
+        wb = openpyxl.Workbook()
+        ws = _create_prev_sheet_with_hatched_sprints(wb, "prev", 2026, 10)
+        result = _find_prev_hatched_col_range(ws, "bonificaciones")
+        assert result is None
+
+    def test_fdr_never_hatched(self):
+        wb = openpyxl.Workbook()
+        ws = _create_prev_sheet_with_hatched_sprints(wb, "prev", 2026, 10)
+        result = _find_prev_hatched_col_range(ws, "fdr")
+        assert result is None
+
+    def test_single_day_hatched(self):
+        wb = openpyxl.Workbook()
+        ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "prev", 2026, 10, bonif_hatched_range=(31, 31))
+        result = _find_prev_hatched_col_range(ws, "bonificaciones")
+        assert result is not None
+        start_l, end_l = result
+        assert start_l == end_l == "AQ"
+
+
+class TestUpdateGapAnteriorFormulas:
+    def test_basic_formula_generation(self):
+        """Generates correct IF formulas with SUM ranges for hatched tails."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10,
+            bonif_hatched_range=(28, 31),
+            subv_hatched_range=(29, 31))
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+
+        updated = update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+        assert updated == 31  # rows 7-37
+
+        # Check row 7 (Transversal → 0)
+        f7 = new_ws.cell(row=7, column=49).value
+        assert '"Transversal",0' in f7
+
+        # Check row 8 (Bonificaciones → SUM of hatched range)
+        f8 = new_ws.cell(row=8, column=49).value
+        assert "SUM('FY26_oct'!AN8:AQ8)" in f8
+
+        # Check row 9 (Subvenciones → SUM of hatched range)
+        f9 = new_ws.cell(row=9, column=49).value
+        assert "SUM('FY26_oct'!AO9:AQ9)" in f9
+
+    def test_formula_with_no_hatched_tails(self):
+        """When no team has hatched tails, formulas use 0."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10)
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+
+        updated = update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+        assert updated == 31
+
+        f8 = new_ws.cell(row=8, column=49).value
+        assert '"Bonificaciones",0' in f8
+        assert '"Subvenciones",0' in f8
+
+    def test_single_cell_reference(self):
+        """Single-day hatched tail uses cell ref instead of SUM."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10,
+            bonif_hatched_range=(31, 31))
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+
+        update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+
+        f8 = new_ws.cell(row=8, column=49).value
+        # Single cell, no SUM
+        assert "'FY26_oct'!AQ8" in f8
+        assert "SUM" not in f8
+
+    def test_fdr_always_zero(self):
+        """FdR team always returns 0 regardless of previous sheet."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10,
+            bonif_hatched_range=(28, 31))
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+        # Add FdR team row
+        new_ws.cell(row=10, column=6, value="Fondos de Reserva")
+
+        update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+
+        f10 = new_ws.cell(row=10, column=49).value
+        assert '"Fondos de Reserva",0' in f10
+
+    def test_factura_column_formula(self):
+        """Second Gap Mes Anterior column gets hours × tarifa formula."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10,
+            bonif_hatched_range=(28, 31))
+        new_ws = _create_sheet_with_gap_cols(
+            wb, "FY26_nov", gap_col=49, gap_factura_col=55)
+
+        updated = update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+        # 31 horas + 31 factura = 62
+        assert updated == 62
+
+        # Factura formula: gap_horas_col_letter is AW (col 49)
+        f7_factura = new_ws.cell(row=7, column=55).value
+        assert f7_factura == "=AW7*G7"
+
+    def test_no_gap_columns_returns_zero(self):
+        """Returns 0 when no Gap Mes Anterior columns found."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10)
+        new_ws = wb.create_sheet("FY26_nov")
+
+        updated = update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+        assert updated == 0
+
+    def test_team_column_detection_in_formula(self):
+        """Formula uses the correct team column letter."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10)
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+        # Team column is at F (from Equipo header)
+
+        update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+
+        f7 = new_ws.cell(row=7, column=49).value
+        assert f7.startswith('=IF(F7="Transversal"')
+
+    def test_formula_references_cost_rows_not_revenue(self):
+        """Formula references same row number in previous sheet (cost rows)."""
+        wb = openpyxl.Workbook()
+        prev_ws = _create_prev_sheet_with_hatched_sprints(
+            wb, "FY26_oct", 2026, 10,
+            bonif_hatched_range=(28, 31))
+        new_ws = _create_sheet_with_gap_cols(wb, "FY26_nov", gap_col=49)
+
+        update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
+
+        # Row 37 (last cost row) should reference row 37, not row 71
+        f37 = new_ws.cell(row=37, column=49).value
+        assert "AN37:AQ37" in f37 or "AN37" in f37

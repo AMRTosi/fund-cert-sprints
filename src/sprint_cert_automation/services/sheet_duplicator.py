@@ -32,6 +32,9 @@ _WEEKDAY_LETTERS = ["L", "M", "X", "J", "V", "S", "D"]
 
 NO_FILL = PatternFill(fill_type=None)
 
+# Team column detection: the column that contains team names
+_TEAM_VALUES = {"Transversal", "Bonificaciones", "Subvenciones", "Fondos de Reserva"}
+
 
 @dataclass
 class DuplicateSheetResult:
@@ -217,6 +220,160 @@ def fill_empty_cost_cells(ws: Worksheet, num_days: int) -> int:
     return filled
 
 
+def _find_team_column(ws: Worksheet) -> str:
+    """Detect which column (letter) holds the team name (Equipo) in the sheet.
+
+    Scans row-6 header for 'Equipo' first; if not found, checks rows 7-37
+    for known team values in columns D, E, F.
+    """
+    # Check header row for 'Equipo'
+    for col in range(1, 12):
+        header = ws.cell(row=DAY_LETTER_ROW, column=col).value
+        if header and "Equipo" in str(header):
+            return get_column_letter(col)
+
+    # Fallback: scan data rows for known team values
+    for col in range(4, 7):  # D, E, F
+        val = ws.cell(row=COST_FIRST_ROW, column=col).value
+        if val and str(val) in _TEAM_VALUES:
+            return get_column_letter(col)
+
+    return "F"  # default
+
+
+def _find_gap_anterior_columns(ws: Worksheet) -> list[int]:
+    """Find all 'Gap Mes Anterior' column indices in row 6."""
+    cols = []
+    for col in range(44, 80):
+        if ws.cell(row=DAY_LETTER_ROW, column=col).value == "Gap Mes Anterior":
+            cols.append(col)
+    return cols
+
+
+def _find_prev_hatched_col_range(
+    prev_ws: Worksheet, team: str,
+) -> tuple[str, str] | None:
+    """Find the column range of the hatched tail sprint for a team in the previous sheet.
+
+    Returns (start_col_letter, end_col_letter) or None if no hatched tail exists.
+    """
+    from sprint_cert_automation.services.sprint_configurator import (
+        read_sprints_from_sheet,
+    )
+
+    prev_sprints = read_sprints_from_sheet(prev_ws)
+    team_info = prev_sprints.get(team)
+    if not team_info or not team_info.has_hatched_tail:
+        return None
+
+    tail = team_info.hatched_tail
+    assert tail is not None
+
+    # Find day-1 column in previous sheet
+    prev_day1_col = FIRST_DAY_COL
+    for col in range(10, FIRST_DAY_COL + 1):
+        if prev_ws.cell(row=DAY_NUMBER_ROW, column=col).value == 1:
+            prev_day1_col = col
+            break
+
+    start_col = prev_day1_col + tail.start_day - 1
+    end_col = prev_day1_col + tail.end_day - 1
+
+    return (get_column_letter(start_col), get_column_letter(end_col))
+
+
+def update_gap_anterior_formulas(
+    ws: Worksheet,
+    prev_sheet_name: str,
+    prev_ws: Worksheet,
+) -> int:
+    """Update T_GAP_PERIODO_ANTERIOR formulas to reference the previous sheet.
+
+    For each employee row (7-37), generates a formula that:
+    - Returns 0 for Transversal and Fondos de Reserva teams.
+    - Returns SUM(prev_sheet!{hatched_range}{row}) for Bonificaciones.
+    - Returns SUM(prev_sheet!{hatched_range}{row}) for Subvenciones.
+
+    Returns the number of cells updated.
+    """
+    team_col = _find_team_column(ws)
+    gap_cols = _find_gap_anterior_columns(ws)
+
+    if not gap_cols:
+        return 0
+
+    # The first Gap Mes Anterior column is the hours/revenue one
+    gap_horas_col = gap_cols[0]
+
+    # Find hatched tail ranges from previous sheet
+    bonif_range = _find_prev_hatched_col_range(prev_ws, "bonificaciones")
+    subv_range = _find_prev_hatched_col_range(prev_ws, "subvenciones")
+
+    updated = 0
+    for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+        # Build the Bonificaciones branch
+        if bonif_range:
+            start_l, end_l = bonif_range
+            if start_l == end_l:
+                bonif_expr = f"'{prev_sheet_name}'!{start_l}{row}"
+            else:
+                bonif_expr = f"SUM('{prev_sheet_name}'!{start_l}{row}:{end_l}{row})"
+        else:
+            bonif_expr = "0"
+
+        # Build the Subvenciones branch
+        if subv_range:
+            start_l, end_l = subv_range
+            if start_l == end_l:
+                subv_expr = f"'{prev_sheet_name}'!{start_l}{row}"
+            else:
+                subv_expr = f"SUM('{prev_sheet_name}'!{start_l}{row}:{end_l}{row})"
+        else:
+            subv_expr = "0"
+
+        formula = (
+            f'=IF({team_col}{row}="Transversal",0,'
+            f'IF({team_col}{row}="Bonificaciones",{bonif_expr},'
+            f'IF({team_col}{row}="Subvenciones",{subv_expr},'
+            f'IF({team_col}{row}="Fondos de Reserva",0,0))))'
+        )
+
+        ws.cell(row=row, column=gap_horas_col).value = formula
+        updated += 1
+
+    # If there's a second Gap Mes Anterior (Factura), update it too
+    # Its formula is: ={gap_horas_col_letter}{row}*{tarifa_col_letter}{row}
+    if len(gap_cols) >= 2:
+        gap_factura_col = gap_cols[1]
+        gap_horas_letter = get_column_letter(gap_horas_col)
+
+        # Find the Tarifa column (typically labeled "Tarifa" in row 6)
+        tarifa_col_letter = None
+        for col in range(1, 12):
+            header = ws.cell(row=DAY_LETTER_ROW, column=col).value
+            if header and "Tarifa" in str(header):
+                tarifa_col_letter = get_column_letter(col)
+                break
+
+        if tarifa_col_letter is None:
+            # Fallback: look at existing formula to determine tarifa column
+            existing = ws.cell(row=COST_FIRST_ROW, column=gap_factura_col).value
+            if existing and isinstance(existing, str) and "*" in existing:
+                # Parse e.g. "=AW7*E7" to extract "E"
+                parts = existing.replace("=", "").split("*")
+                if len(parts) == 2:
+                    ref = parts[1].strip()
+                    tarifa_col_letter = "".join(c for c in ref if c.isalpha())
+
+        if tarifa_col_letter:
+            for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+                formula = f"={gap_horas_letter}{row}*{tarifa_col_letter}{row}"
+                ws.cell(row=row, column=gap_factura_col).value = formula
+                updated += 1
+
+    return updated
+
+
 def duplicate_sheet(
     workbook_path: Path,
     source_sheet_name: str,
@@ -235,6 +392,7 @@ def duplicate_sheet(
     4. Remove gray fills from T_COST_HOURS_ONLY.
     5. Fill empty cost cells on working days with the appropriate formula.
     6. Configure sprint segments (T_SPRINTS rows 1-4) based on previous period.
+    7. Update T_GAP_PERIODO_ANTERIOR formulas to reference previous sheet.
     """
     from sprint_cert_automation.services.sprint_configurator import configure_sprints
 
@@ -304,6 +462,10 @@ def duplicate_sheet(
         prev_year=prev_year,
         prev_month=prev_month,
     )
+
+    # 7. Update Gap Mes Anterior formulas
+    if previous_sheet_name and prev_ws:
+        update_gap_anterior_formulas(new_ws, previous_sheet_name, prev_ws)
 
     # Save
     wb.save(str(workbook_path))
