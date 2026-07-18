@@ -223,6 +223,7 @@ def duplicate_sheet(
     new_sheet_name: str,
     year: int,
     month: int,
+    previous_sheet_name: str | None = None,
     dry_run: bool = False,
 ) -> DuplicateSheetResult:
     """Duplicate a sheet in the forecast workbook and adapt it for the given month.
@@ -233,7 +234,10 @@ def duplicate_sheet(
     3. Update the calendar (day numbers and weekday letters).
     4. Remove gray fills from T_COST_HOURS_ONLY.
     5. Fill empty cost cells on working days with the appropriate formula.
+    6. Configure sprint segments (T_SPRINTS rows 1-4) based on previous period.
     """
+    from sprint_cert_automation.services.sprint_configurator import configure_sprints
+
     num_days = calendar.monthrange(year, month)[1]
 
     if dry_run:
@@ -259,6 +263,12 @@ def duplicate_sheet(
             f"Sheet '{new_sheet_name}' already exists in the workbook."
         )
 
+    if previous_sheet_name and previous_sheet_name not in wb.sheetnames:
+        raise ValueError(
+            f"Previous period sheet '{previous_sheet_name}' not found. "
+            f"Available sheets: {wb.sheetnames}"
+        )
+
     # 1. Copy sheet
     source_ws = wb[source_sheet_name]
     new_ws = wb.copy_worksheet(source_ws)
@@ -277,6 +287,24 @@ def duplicate_sheet(
     # 5. Fill empty cost cells
     fill_empty_cost_cells(new_ws, actual_days)
 
+    # 6. Configure sprints
+    prev_ws = None
+    prev_year = None
+    prev_month = None
+    if previous_sheet_name:
+        prev_ws = wb[previous_sheet_name]
+        prev_year, prev_month = _infer_year_month_from_sheet_name(previous_sheet_name, year, month)
+
+    configure_sprints(
+        ws=new_ws,
+        year=year,
+        month=month,
+        num_days=actual_days,
+        prev_ws=prev_ws,
+        prev_year=prev_year,
+        prev_month=prev_month,
+    )
+
     # Save
     wb.save(str(workbook_path))
 
@@ -288,3 +316,41 @@ def duplicate_sheet(
         month=month,
         days_in_month=actual_days,
     )
+
+
+def _infer_year_month_from_sheet_name(
+    sheet_name: str, target_year: int, target_month: int
+) -> tuple[int, int]:
+    """Infer the calendar year and month from a FY sheet name.
+
+    FY naming convention: FY{fiscal_year}_{month_abbr}
+    Fiscal year starts September, e.g. FY27_sept = September 2026.
+    Falls back to the month before the target if parsing fails.
+    """
+    month_map = {
+        "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dic": 12,
+        "ene": 1, "feb": 2, "mar": 3, "abr": 4,
+        "mayo": 5, "may": 5, "jun": 6, "jul": 7, "ago": 8,
+    }
+
+    parts = sheet_name.split("_", 1)
+    if len(parts) == 2:
+        fy_part, month_part = parts
+        fy_num_str = fy_part.replace("FY", "").replace("fy", "")
+        month_key = month_part.lower().strip()
+
+        if fy_num_str.isdigit() and month_key in month_map:
+            fy_num = int(fy_num_str)
+            m = month_map[month_key]
+            # FY starts in September: Sept-Dec belong to (2000+fy_num-1),
+            # Jan-Aug belong to (2000+fy_num)
+            if m >= 9:
+                y = 2000 + fy_num - 1
+            else:
+                y = 2000 + fy_num
+            return y, m
+
+    # Fallback: previous month of target
+    if target_month == 1:
+        return target_year - 1, 12
+    return target_year, target_month - 1

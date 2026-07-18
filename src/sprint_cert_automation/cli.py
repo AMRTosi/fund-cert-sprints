@@ -41,6 +41,7 @@ def _add_duplicate_sheet_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--target", required=True, type=str, help="Name for the new duplicated sheet")
     parser.add_argument("--year", required=True, type=int, help="Calendar year for the new period")
     parser.add_argument("--month", required=True, type=int, help="Calendar month 1..12 for the new period")
+    parser.add_argument("--previous", type=str, default=None, help="Name of the previous period sheet (for sprint carry-over)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without modifying the workbook")
 
 
@@ -135,6 +136,7 @@ def _run_duplicate_sheet(args: argparse.Namespace) -> int:
         new_sheet=args.target,
         year=args.year,
         month=args.month,
+        previous_sheet=args.previous,
         dry_run=args.dry_run,
     )
 

@@ -103,7 +103,27 @@ This command scans `certificaciones/YYYY-MM`, executes macro `SELECCIONAR_HOJAS_
   --month 12
 ```
 
-This command copies the source sheet, renames it, positions it right after the source, and adapts the calendar (day numbers and weekday letters) for the target month. It also removes gray fills from the cost table and fills empty weekday cells with the appropriate formula. Use `--dry-run` to preview without modifying the workbook.
+This command copies the source sheet, renames it, positions it right after the source, and adapts the calendar (day numbers and weekday letters) for the target month. It also removes gray fills from the cost table, fills empty weekday cells with the appropriate formula, and configures sprint segments (T_SPRINTS) based on team rules.
+
+Use `--previous` to specify the previous period sheet so sprint carry-over and numbering are calculated correctly:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli duplicate-sheet `
+  --forecast "./inputs/Fundae_Forecast_Copilot_v2.xlsx" `
+  --source "Template_Mes" `
+  --target "FY27_dic" `
+  --year 2026 `
+  --month 12 `
+  --previous "FY27_nov"
+```
+
+Sprint rules applied automatically:
+- **Bonificaciones**: 10 working days per sprint, carry-over from previous period.
+- **Subvenciones**: 16 working days per sprint, carry-over from previous period.
+- **Fondos de Reserva**: two sprints per month (days 1-15 and 16-last), sequential numbering.
+- **Transversal**: one sprint spanning the entire month, named with the Spanish month name.
+
+Sprints that extend beyond the month are shown with hatched fill. Use `--dry-run` to preview without modifying the workbook.
 
 ## Quick start (first run)
 

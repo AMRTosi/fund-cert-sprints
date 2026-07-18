@@ -49,6 +49,7 @@ def duplicate_period_sheet(
     new_sheet: str,
     year: int,
     month: int,
+    previous_sheet: str | None = None,
     dry_run: bool = False,
 ) -> DuplicateSheetResult:
     return duplicate_sheet(
@@ -57,5 +58,6 @@ def duplicate_period_sheet(
         new_sheet_name=new_sheet,
         year=year,
         month=month,
+        previous_sheet_name=previous_sheet,
         dry_run=dry_run,
     )
