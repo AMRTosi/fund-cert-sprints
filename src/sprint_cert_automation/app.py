@@ -8,6 +8,7 @@ from sprint_cert_automation.services.certificate_service import (
     GenerationResult,
 )
 from sprint_cert_automation.services.macro_export_service import MacroExportResult, MacroExportService
+from sprint_cert_automation.services.sheet_duplicator import DuplicateSheetResult, duplicate_sheet
 
 
 def generate_certificates(
@@ -38,5 +39,23 @@ def export_certificates_to_pdf(
     service = MacroExportService(macro_name=macro_name)
     return service.run(
         input_dir=input_dir,
+        dry_run=dry_run,
+    )
+
+
+def duplicate_period_sheet(
+    forecast_path: Path,
+    source_sheet: str,
+    new_sheet: str,
+    year: int,
+    month: int,
+    dry_run: bool = False,
+) -> DuplicateSheetResult:
+    return duplicate_sheet(
+        workbook_path=forecast_path,
+        source_sheet_name=source_sheet,
+        new_sheet_name=new_sheet,
+        year=year,
+        month=month,
         dry_run=dry_run,
     )

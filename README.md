@@ -92,6 +92,19 @@ For the command above, output folder is:
 
 This command scans `certificaciones/YYYY-MM`, executes macro `SELECCIONAR_HOJAS_INFORME` in each `.xlsm`, and writes a `.pdf` with the same base name next to each workbook using the resulting selected sheets.
 
+8. Duplicate a period sheet for a new month:
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli duplicate-sheet `
+  --forecast "./inputs/Fundae_Forecast_Copilot_v2.xlsx" `
+  --source "Template_Mes" `
+  --target "FY27_dic" `
+  --year 2026 `
+  --month 12
+```
+
+This command copies the source sheet, renames it, positions it right after the source, and adapts the calendar (day numbers and weekday letters) for the target month. It also removes gray fills from the cost table and fills empty weekday cells with the appropriate formula. Use `--dry-run` to preview without modifying the workbook.
+
 ## Quick start (first run)
 
 1. Create and populate local virtual environment in `cert_automation/.venv`:
