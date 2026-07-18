@@ -291,11 +291,17 @@ def update_gap_anterior_formulas(
 
     For each employee row (7-37), generates a formula that:
     - Returns 0 for Transversal and Fondos de Reserva teams.
-    - Returns SUM(prev_sheet!{hatched_range}{row}) for Bonificaciones.
-    - Returns SUM(prev_sheet!{hatched_range}{row}) for Subvenciones.
+    - Returns SUM of the corresponding T_REVENUES_TIMESHEET row (row+34) in
+      the previous sheet's hatched tail range for Bonificaciones/Subvenciones.
+
+    The revenue rows are used because the gap represents billable hours,
+    not cost hours.
 
     Returns the number of cells updated.
     """
+    # Revenue row offset: cost row 7 → revenue row 41, etc.
+    REVENUE_OFFSET = REVENUE_FIRST_ROW - COST_FIRST_ROW  # 34
+
     team_col = _find_team_column(ws)
     gap_cols = _find_gap_anterior_columns(ws)
 
@@ -311,23 +317,25 @@ def update_gap_anterior_formulas(
 
     updated = 0
     for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
-        # Build the Bonificaciones branch
+        rev_row = row + REVENUE_OFFSET
+
+        # Build the Bonificaciones branch (referencing revenue rows)
         if bonif_range:
             start_l, end_l = bonif_range
             if start_l == end_l:
-                bonif_expr = f"'{prev_sheet_name}'!{start_l}{row}"
+                bonif_expr = f"'{prev_sheet_name}'!{start_l}{rev_row}"
             else:
-                bonif_expr = f"SUM('{prev_sheet_name}'!{start_l}{row}:{end_l}{row})"
+                bonif_expr = f"SUM('{prev_sheet_name}'!{start_l}{rev_row}:{end_l}{rev_row})"
         else:
             bonif_expr = "0"
 
-        # Build the Subvenciones branch
+        # Build the Subvenciones branch (referencing revenue rows)
         if subv_range:
             start_l, end_l = subv_range
             if start_l == end_l:
-                subv_expr = f"'{prev_sheet_name}'!{start_l}{row}"
+                subv_expr = f"'{prev_sheet_name}'!{start_l}{rev_row}"
             else:
-                subv_expr = f"SUM('{prev_sheet_name}'!{start_l}{row}:{end_l}{row})"
+                subv_expr = f"SUM('{prev_sheet_name}'!{start_l}{rev_row}:{end_l}{rev_row})"
         else:
             subv_expr = "0"
 

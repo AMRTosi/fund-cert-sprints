@@ -755,13 +755,15 @@ class TestUpdateGapAnteriorFormulas:
         f7 = new_ws.cell(row=7, column=49).value
         assert '"Transversal",0' in f7
 
-        # Check row 8 (Bonificaciones → SUM of hatched range)
+        # Check row 8 (Bonificaciones → SUM of hatched range in revenue rows)
+        # Cost row 8 → revenue row 42 in previous sheet
         f8 = new_ws.cell(row=8, column=49).value
-        assert "SUM('FY26_oct'!AN8:AQ8)" in f8
+        assert "SUM('FY26_oct'!AN42:AQ42)" in f8
 
-        # Check row 9 (Subvenciones → SUM of hatched range)
+        # Check row 9 (Subvenciones → SUM of hatched range in revenue rows)
+        # Cost row 9 → revenue row 43 in previous sheet
         f9 = new_ws.cell(row=9, column=49).value
-        assert "SUM('FY26_oct'!AO9:AQ9)" in f9
+        assert "SUM('FY26_oct'!AO43:AQ43)" in f9
 
     def test_formula_with_no_hatched_tails(self):
         """When no team has hatched tails, formulas use 0."""
@@ -778,7 +780,7 @@ class TestUpdateGapAnteriorFormulas:
         assert '"Subvenciones",0' in f8
 
     def test_single_cell_reference(self):
-        """Single-day hatched tail uses cell ref instead of SUM."""
+        """Single-day hatched tail uses cell ref instead of SUM (revenue row)."""
         wb = openpyxl.Workbook()
         prev_ws = _create_prev_sheet_with_hatched_sprints(
             wb, "FY26_oct", 2026, 10,
@@ -787,9 +789,9 @@ class TestUpdateGapAnteriorFormulas:
 
         update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
 
+        # Cost row 8 → revenue row 42
         f8 = new_ws.cell(row=8, column=49).value
-        # Single cell, no SUM
-        assert "'FY26_oct'!AQ8" in f8
+        assert "'FY26_oct'!AQ42" in f8
         assert "SUM" not in f8
 
     def test_fdr_always_zero(self):
@@ -847,8 +849,8 @@ class TestUpdateGapAnteriorFormulas:
         f7 = new_ws.cell(row=7, column=49).value
         assert f7.startswith('=IF(F7="Transversal"')
 
-    def test_formula_references_cost_rows_not_revenue(self):
-        """Formula references same row number in previous sheet (cost rows)."""
+    def test_formula_references_revenue_rows_not_cost(self):
+        """Formula references revenue rows (row+34) in previous sheet."""
         wb = openpyxl.Workbook()
         prev_ws = _create_prev_sheet_with_hatched_sprints(
             wb, "FY26_oct", 2026, 10,
@@ -857,6 +859,10 @@ class TestUpdateGapAnteriorFormulas:
 
         update_gap_anterior_formulas(new_ws, "FY26_oct", prev_ws)
 
-        # Row 37 (last cost row) should reference row 37, not row 71
+        # Row 7 (first cost row) → references revenue row 41
+        f7 = new_ws.cell(row=7, column=49).value
+        assert "AN41:AQ41" in f7 or "AN41" in f7
+
+        # Row 37 (last cost row) → references revenue row 71
         f37 = new_ws.cell(row=37, column=49).value
-        assert "AN37:AQ37" in f37 or "AN37" in f37
+        assert "AN71:AQ71" in f37 or "AN71" in f37
