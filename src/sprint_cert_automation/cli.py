@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 import sys
 
-from sprint_cert_automation.app import export_certificates_to_pdf, generate_certificates
+from sprint_cert_automation.app import duplicate_period_sheet, export_certificates_to_pdf, generate_certificates
 from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.utils.dates import today_year_month
 
@@ -24,8 +24,8 @@ def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _add_export_pdf_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--input-dir", type=Path, default=None, help="Folder with validated .xlsm files")
-    parser.add_argument("--year", type=int, default=None, help="Target year for default folder")
-    parser.add_argument("--month", type=int, default=None, help="Target month 1..12 for default folder")
+    parser.add_argument("--year", type=int, default=None, help="Target year")
+    parser.add_argument("--month", type=int, default=None, help="Target month 1..12")
     parser.add_argument(
         "--macro-name",
         type=str,
@@ -33,6 +33,16 @@ def _add_export_pdf_arguments(parser: argparse.ArgumentParser) -> None:
         help="Macro to execute before selecting sheets and exporting PDF",
     )
     parser.add_argument("--dry-run", action="store_true", help="List files without executing macro/export")
+
+
+def _add_duplicate_sheet_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--forecast", required=True, type=Path, help="Forecast workbook path")
+    parser.add_argument("--source", required=True, type=str, help="Name of the source sheet to copy")
+    parser.add_argument("--target", required=True, type=str, help="Name for the new duplicated sheet")
+    parser.add_argument("--year", required=True, type=int, help="Calendar year for the new period")
+    parser.add_argument("--month", required=True, type=int, help="Calendar month 1..12 for the new period")
+    parser.add_argument("--previous", type=str, default=None, help="Name of the previous period sheet (for sprint carry-over)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be done without modifying the workbook")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,13 +63,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_export_pdf_arguments(export_pdf_parser)
 
+    duplicate_parser = subparsers.add_parser(
+        "duplicate-sheet",
+        help="Duplicate a period sheet and adapt its calendar for a given month",
+    )
+    _add_duplicate_sheet_arguments(duplicate_parser)
+
     return parser
 
 
 def _normalize_args(raw_args: list[str]) -> list[str]:
     if not raw_args:
         return ["generate"]
-    if raw_args[0] in {"generate", "export-pdf"}:
+    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet"}:
         return raw_args
     return ["generate", *raw_args]
 
@@ -113,6 +129,25 @@ def _run_export_pdf(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_duplicate_sheet(args: argparse.Namespace) -> int:
+    result = duplicate_period_sheet(
+        forecast_path=args.forecast,
+        source_sheet=args.source,
+        new_sheet=args.target,
+        year=args.year,
+        month=args.month,
+        previous_sheet=args.previous,
+        dry_run=args.dry_run,
+    )
+
+    action = "Would duplicate" if args.dry_run else "Duplicated"
+    print(f"{action} sheet '{result.source_sheet}' -> '{result.new_sheet}'")
+    print(f"  Workbook: {result.workbook_path}")
+    print(f"  Period: {result.year}-{result.month:02d} ({result.days_in_month} days)")
+
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_args = sys.argv[1:] if argv is None else argv
@@ -122,8 +157,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_export_pdf(args)
     if args.command == "generate":
         return _run_generate(args)
+    if args.command == "duplicate-sheet":
+        return _run_duplicate_sheet(args)
 
-    parser.error("Command must be one of: generate, export-pdf")
+    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet")
     return 2
 
 
