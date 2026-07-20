@@ -29,6 +29,11 @@ from sprint_cert_automation.services.sheet_duplicator import (
     remove_gray_fills,
     update_calendar,
     update_gap_anterior_formulas,
+    update_revenues_mes_actual_formulas,
+    update_revenues_no_fact_formulas,
+    _find_gap_mes_actual_columns,
+    _find_mes_actual_columns,
+    _find_last_billable_day,
 )
 
 
@@ -866,3 +871,481 @@ class TestUpdateGapAnteriorFormulas:
         # Row 37 (last cost row) → references revenue row 71
         f37 = new_ws.cell(row=37, column=49).value
         assert "AN71:AQ71" in f37 or "AN71" in f37
+
+
+# ---------------------------------------------------------------------------
+# Revenues Mes Actual formula tests
+# ---------------------------------------------------------------------------
+
+
+def _create_sheet_with_sprints_and_mes_actual(wb, name, year, month,
+                                               bonif_segments=None,
+                                               subv_segments=None,
+                                               mes_actual_col=53,
+                                               mes_actual_factura_col=None):
+    """Create a sheet with sprint config and Mes Actual column for testing."""
+    from sprint_cert_automation.services.sprint_configurator import (
+        BONIF_HATCHED_FILL,
+        BONIF_SOLID_FILL,
+        SUBV_HATCHED_FILL,
+        SUBV_SOLID_FILL,
+        FDR_SOLID_FILL,
+        TRANSV_SOLID_FILL,
+    )
+    import calendar as cal_mod
+
+    ws = wb.create_sheet(name)
+    num_days = cal_mod.monthrange(year, month)[1]
+
+    # Set up calendar row 5 (day numbers)
+    for day in range(1, num_days + 1):
+        ws.cell(row=DAY_NUMBER_ROW, column=FIRST_DAY_COL + day - 1, value=day)
+
+    # Team column at F
+    ws.cell(row=DAY_LETTER_ROW, column=6, value="Equipo")
+    # Tarifa column at G
+    ws.cell(row=DAY_LETTER_ROW, column=7, value="Tarifa")
+
+    # Set team names and tarifa for rows 7-10
+    teams = ["Transversal", "Bonificaciones", "Subvenciones", "Fondos de Reserva"]
+    for i, team in enumerate(teams):
+        ws.cell(row=COST_FIRST_ROW + i, column=6, value=team)
+        ws.cell(row=COST_FIRST_ROW + i, column=7, value=50)
+        # Also set revenue row team
+        ws.cell(row=REVENUE_FIRST_ROW + i, column=6, value=team)
+
+    # Mes Actual header
+    ws.cell(row=DAY_LETTER_ROW, column=mes_actual_col, value="Mes Actual")
+    if mes_actual_factura_col:
+        ws.cell(row=DAY_LETTER_ROW, column=mes_actual_factura_col, value="Mes Actual")
+
+    def _write_segment(row, start_day, end_day, label, fill):
+        start_col = FIRST_DAY_COL + start_day - 1
+        end_col = FIRST_DAY_COL + end_day - 1
+        cell = ws.cell(row=row, column=start_col)
+        cell.value = label
+        cell.fill = fill
+        for c in range(start_col + 1, end_col + 1):
+            ws.cell(row=row, column=c).fill = fill
+        if end_col > start_col:
+            ws.merge_cells(
+                start_row=row, start_column=start_col,
+                end_row=row, end_column=end_col)
+
+    # Bonificaciones (row 1)
+    if bonif_segments:
+        for start, end, label, hatched in bonif_segments:
+            fill = BONIF_HATCHED_FILL if hatched else BONIF_SOLID_FILL
+            _write_segment(1, start, end, label, fill)
+    else:
+        _write_segment(1, 1, num_days, "SP263", BONIF_SOLID_FILL)
+
+    # Subvenciones (row 2)
+    if subv_segments:
+        for start, end, label, hatched in subv_segments:
+            fill = SUBV_HATCHED_FILL if hatched else SUBV_SOLID_FILL
+            _write_segment(2, start, end, label, fill)
+    else:
+        _write_segment(2, 1, num_days, "SP206", SUBV_SOLID_FILL)
+
+    # FdR (row 3) - two sprints: days 1-15 and 16-last
+    _write_segment(3, 1, 15, "FdR Sprint 1", FDR_SOLID_FILL)
+    _write_segment(3, 16, num_days, "FdR Sprint 2", FDR_SOLID_FILL)
+
+    # Transversal (row 4) - full month
+    _write_segment(4, 1, num_days, "TRANSVERSAL", TRANSV_SOLID_FILL)
+
+    return ws
+
+
+class TestFindMesActualColumns:
+    def test_finds_single_col(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=53, value="Mes Actual")
+        assert _find_mes_actual_columns(ws) == [53]
+
+    def test_excludes_gap_mes_actual(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=53, value="Mes Actual")
+        ws.cell(row=DAY_LETTER_ROW, column=55, value="Gap Mes Actual")
+        assert _find_mes_actual_columns(ws) == [53]
+
+    def test_finds_two_cols(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=53, value="Mes Actual")
+        ws.cell(row=DAY_LETTER_ROW, column=59, value="Mes Actual")
+        assert _find_mes_actual_columns(ws) == [53, 59]
+
+
+class TestFindLastBillableDay:
+    def test_all_solid(self):
+        from sprint_cert_automation.services.sprint_configurator import SprintSegment
+        segments = [
+            SprintSegment("SP1", 1, 1, 14, False, "bonificaciones"),
+            SprintSegment("SP2", 2, 15, 28, False, "bonificaciones"),
+        ]
+        assert _find_last_billable_day(segments, "bonificaciones") == 28
+
+    def test_last_is_hatched(self):
+        from sprint_cert_automation.services.sprint_configurator import SprintSegment
+        segments = [
+            SprintSegment("SP1", 1, 1, 14, False, "bonificaciones"),
+            SprintSegment("SP2", 2, 15, 25, False, "bonificaciones"),
+            SprintSegment("SP3", 3, 26, 31, True, "bonificaciones"),
+        ]
+        assert _find_last_billable_day(segments, "bonificaciones") == 25
+
+    def test_all_hatched(self):
+        from sprint_cert_automation.services.sprint_configurator import SprintSegment
+        segments = [
+            SprintSegment("SP1", 1, 1, 31, True, "bonificaciones"),
+        ]
+        assert _find_last_billable_day(segments, "bonificaciones") is None
+
+    def test_empty_segments(self):
+        assert _find_last_billable_day([], "bonificaciones") is None
+
+
+class TestUpdateRevenuesMesActualFormulas:
+    def test_basic_formula_with_all_solid_sprints(self):
+        """All sprints solid → SUM covers full month for all teams."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_oct", 2026, 10)
+
+        updated = update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+        assert updated == 31  # rows 7-37
+
+        # Row 7: Transversal, rev_row=41, last day=31→col AQ
+        f7 = ws.cell(row=7, column=53).value
+        assert 'SUM(M41:AQ41)' in f7
+        assert '"Transversal"' in f7
+
+    def test_hatched_sprint_excluded_from_range(self):
+        """Hatched sprints are excluded - SUM ends at last solid sprint."""
+        wb = openpyxl.Workbook()
+        # Bonif: solid days 1-25, hatched 26-31
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            bonif_segments=[
+                (1, 14, "SP264", False),
+                (15, 25, "SP265", False),
+                (26, 30, "SP266", True),
+            ])
+
+        update_revenues_mes_actual_formulas(ws, 2026, 11, 30)
+
+        # Bonif last solid day=25 → col M+24=col37=AK
+        f8 = ws.cell(row=8, column=53).value
+        assert '"Bonificaciones",SUM(M42:AK42)' in f8
+
+        # Transversal still full month (day 30 → col AQ-1=AP? Let me compute)
+        # FIRST_DAY_COL=13, day30→col42=AP
+        f7 = ws.cell(row=7, column=53).value
+        assert '"Transversal",SUM(M41:AP41)' in f7
+
+    def test_subv_hatched_excluded(self):
+        """Subvenciones hatched sprint excluded from billing range."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            subv_segments=[
+                (1, 20, "SP207", False),
+                (21, 30, "SP208", True),
+            ])
+
+        update_revenues_mes_actual_formulas(ws, 2026, 11, 30)
+
+        # Subv last solid day=20 → col13+19=col32=AF
+        f9 = ws.cell(row=9, column=53).value
+        assert '"Subvenciones",SUM(M43:AF43)' in f9
+
+    def test_fdr_always_full_month(self):
+        """FdR always completes in-month, so SUM covers full month."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_oct", 2026, 10)
+
+        update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+
+        # FdR last day=31→AQ
+        f10 = ws.cell(row=10, column=53).value
+        assert '"Fondos de Reserva",SUM(M44:AQ44)' in f10
+
+    def test_references_revenue_rows(self):
+        """Formula references revenue rows (cost_row + 34)."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_oct", 2026, 10)
+
+        update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+
+        # Row 7 → rev row 41, Row 37 → rev row 71
+        f7 = ws.cell(row=7, column=53).value
+        assert "41" in f7
+        f37 = ws.cell(row=37, column=53).value
+        assert "71" in f37
+
+    def test_team_column_in_formula(self):
+        """Formula uses correct team column letter for IF checks."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_oct", 2026, 10)
+
+        update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+
+        # Team col is F (from Equipo header), references revenue row
+        f7 = ws.cell(row=7, column=53).value
+        assert f7.startswith('=IF(F41="Transversal"')
+
+    def test_factura_column_formula(self):
+        """Second Mes Actual column gets horas × tarifa formula."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_mes_actual(
+            wb, "FY27_oct", 2026, 10,
+            mes_actual_col=53, mes_actual_factura_col=59)
+
+        updated = update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+        # 31 horas + 31 factura = 62
+        assert updated == 62
+
+        # Factura: =BA7*G7
+        f7_factura = ws.cell(row=7, column=59).value
+        assert f7_factura == "=BA7*G7"
+
+    def test_no_mes_actual_column_returns_zero(self):
+        """Returns 0 when no Mes Actual columns found."""
+        wb = openpyxl.Workbook()
+        ws = wb.create_sheet("test")
+
+        updated = update_revenues_mes_actual_formulas(ws, 2026, 10, 31)
+        assert updated == 0
+
+
+# ---------------------------------------------------------------------------
+# Revenues Periodo Actual No Facturable formula tests
+# ---------------------------------------------------------------------------
+
+
+def _create_sheet_with_sprints_and_gap_mes_actual(wb, name, year, month,
+                                                   bonif_segments=None,
+                                                   subv_segments=None,
+                                                   gap_col=55,
+                                                   gap_factura_col=None):
+    """Create a sheet with sprint config and Gap Mes Actual column for testing."""
+    from sprint_cert_automation.services.sprint_configurator import (
+        BONIF_HATCHED_FILL,
+        BONIF_SOLID_FILL,
+        SUBV_HATCHED_FILL,
+        SUBV_SOLID_FILL,
+        FDR_SOLID_FILL,
+        TRANSV_SOLID_FILL,
+    )
+    import calendar as cal_mod
+
+    ws = wb.create_sheet(name)
+    num_days = cal_mod.monthrange(year, month)[1]
+
+    # Set up calendar row 5 (day numbers)
+    for day in range(1, num_days + 1):
+        ws.cell(row=DAY_NUMBER_ROW, column=FIRST_DAY_COL + day - 1, value=day)
+
+    # Team column at F
+    ws.cell(row=DAY_LETTER_ROW, column=6, value="Equipo")
+    # Tarifa column at G
+    ws.cell(row=DAY_LETTER_ROW, column=7, value="Tarifa")
+
+    # Set team names for cost and revenue rows
+    teams = ["Transversal", "Bonificaciones", "Subvenciones", "Fondos de Reserva"]
+    for i, team in enumerate(teams):
+        ws.cell(row=COST_FIRST_ROW + i, column=6, value=team)
+        ws.cell(row=COST_FIRST_ROW + i, column=7, value=50)
+        ws.cell(row=REVENUE_FIRST_ROW + i, column=6, value=team)
+
+    # Gap Mes Actual header
+    ws.cell(row=DAY_LETTER_ROW, column=gap_col, value="Gap Mes Actual")
+    if gap_factura_col:
+        ws.cell(row=DAY_LETTER_ROW, column=gap_factura_col, value="Gap Mes Actual")
+
+    def _write_segment(row, start_day, end_day, label, fill):
+        start_col = FIRST_DAY_COL + start_day - 1
+        end_col = FIRST_DAY_COL + end_day - 1
+        cell = ws.cell(row=row, column=start_col)
+        cell.value = label
+        cell.fill = fill
+        for c in range(start_col + 1, end_col + 1):
+            ws.cell(row=row, column=c).fill = fill
+        if end_col > start_col:
+            ws.merge_cells(
+                start_row=row, start_column=start_col,
+                end_row=row, end_column=end_col)
+
+    # Bonificaciones (row 1)
+    if bonif_segments:
+        for start, end, label, hatched in bonif_segments:
+            fill = BONIF_HATCHED_FILL if hatched else BONIF_SOLID_FILL
+            _write_segment(1, start, end, label, fill)
+    else:
+        _write_segment(1, 1, num_days, "SP263", BONIF_SOLID_FILL)
+
+    # Subvenciones (row 2)
+    if subv_segments:
+        for start, end, label, hatched in subv_segments:
+            fill = SUBV_HATCHED_FILL if hatched else SUBV_SOLID_FILL
+            _write_segment(2, start, end, label, fill)
+    else:
+        _write_segment(2, 1, num_days, "SP206", SUBV_SOLID_FILL)
+
+    # FdR (row 3) - always complete
+    _write_segment(3, 1, 15, "FdR Sprint 1", FDR_SOLID_FILL)
+    _write_segment(3, 16, num_days, "FdR Sprint 2", FDR_SOLID_FILL)
+
+    # Transversal (row 4) - full month
+    _write_segment(4, 1, num_days, "TRANSVERSAL", TRANSV_SOLID_FILL)
+
+    return ws
+
+
+class TestFindGapMesActualColumns:
+    def test_finds_gap_mes_actual(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=55, value="Gap Mes Actual")
+        assert _find_gap_mes_actual_columns(ws) == [55]
+
+    def test_excludes_plain_mes_actual(self):
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.cell(row=DAY_LETTER_ROW, column=53, value="Mes Actual")
+        ws.cell(row=DAY_LETTER_ROW, column=55, value="Gap Mes Actual")
+        assert _find_gap_mes_actual_columns(ws) == [55]
+
+
+class TestUpdateRevenuesNoFactFormulas:
+    def test_all_sprints_solid_full_month(self):
+        """All sprints cover full month → all formulas return 0."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_oct", 2026, 10)
+
+        updated = update_revenues_no_fact_formulas(ws, 2026, 10, 31)
+        assert updated == 31
+
+        # All teams: 0 (full month covered)
+        f7 = ws.cell(row=7, column=55).value
+        assert '"Transversal",0' in f7
+        assert '"Bonificaciones",0' in f7
+        assert '"Subvenciones",0' in f7
+
+    def test_hatched_sprint_range(self):
+        """Hatched sprint days appear as non-billable SUM range."""
+        wb = openpyxl.Workbook()
+        # Bonif: solid 1-25, hatched 26-30
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            bonif_segments=[
+                (1, 14, "SP264", False),
+                (15, 25, "SP265", False),
+                (26, 30, "SP266", True),
+            ])
+
+        update_revenues_no_fact_formulas(ws, 2026, 11, 30)
+
+        # Bonif non-billable: day 26 to day 30
+        # Day 26 → col 13+25=38=AL, Day 30 → col 13+29=42=AP
+        f8 = ws.cell(row=8, column=55).value
+        assert "SUM(AL42:AP42)" in f8
+
+    def test_subv_hatched_range(self):
+        """Subvenciones non-billable range computed correctly."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            subv_segments=[
+                (1, 20, "SP207", False),
+                (21, 30, "SP208", True),
+            ])
+
+        update_revenues_no_fact_formulas(ws, 2026, 11, 30)
+
+        # Subv non-billable: day 21 to 30
+        # Day 21 → col 13+20=33=AG, Day 30 → col 42=AP
+        f9 = ws.cell(row=9, column=55).value
+        assert "SUM(AG43:AP43)" in f9
+
+    def test_transversal_always_zero(self):
+        """Transversal always returns 0."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            bonif_segments=[(1, 25, "SP265", False), (26, 30, "SP266", True)])
+
+        update_revenues_no_fact_formulas(ws, 2026, 11, 30)
+
+        f7 = ws.cell(row=7, column=55).value
+        assert '"Transversal",0' in f7
+
+    def test_fdr_always_zero(self):
+        """FdR always returns 0."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            bonif_segments=[(1, 25, "SP265", False), (26, 30, "SP266", True)])
+
+        update_revenues_no_fact_formulas(ws, 2026, 11, 30)
+
+        f10 = ws.cell(row=10, column=55).value
+        assert '"Fondos de Reserva",0' in f10
+
+    def test_references_revenue_rows(self):
+        """Formula references revenue rows (row + 34)."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_nov", 2026, 11,
+            bonif_segments=[(1, 25, "SP265", False), (26, 30, "SP266", True)])
+
+        update_revenues_no_fact_formulas(ws, 2026, 11, 30)
+
+        # Row 7 → rev 41, Row 37 → rev 71
+        f7 = ws.cell(row=7, column=55).value
+        assert "41" in f7
+        f37 = ws.cell(row=37, column=55).value
+        assert "71" in f37
+
+    def test_single_day_no_sum(self):
+        """Single non-billable day uses direct cell ref."""
+        wb = openpyxl.Workbook()
+        # Bonif solid 1-30 in a 31-day month → day 31 non-billable
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_oct", 2026, 10,
+            bonif_segments=[(1, 30, "SP265", False)])
+        # Not hatched, but sprint ends day 30 in a 31-day month
+
+        update_revenues_no_fact_formulas(ws, 2026, 10, 31)
+
+        # Day 31 → col 43=AQ, single cell
+        f8 = ws.cell(row=8, column=55).value
+        assert "AQ42" in f8
+        assert "SUM" not in f8.split("Bonificaciones")[1].split(",")[0]
+
+    def test_factura_column(self):
+        """Second Gap Mes Actual column gets horas × tarifa."""
+        wb = openpyxl.Workbook()
+        ws = _create_sheet_with_sprints_and_gap_mes_actual(
+            wb, "FY27_oct", 2026, 10,
+            gap_col=55, gap_factura_col=61)
+
+        updated = update_revenues_no_fact_formulas(ws, 2026, 10, 31)
+        assert updated == 62  # 31 + 31
+
+        f7_factura = ws.cell(row=7, column=61).value
+        assert f7_factura == "=BC7*G7"
+
+    def test_no_gap_columns_returns_zero(self):
+        """Returns 0 when no Gap Mes Actual columns found."""
+        wb = openpyxl.Workbook()
+        ws = wb.create_sheet("test")
+        assert update_revenues_no_fact_formulas(ws, 2026, 10, 31) == 0

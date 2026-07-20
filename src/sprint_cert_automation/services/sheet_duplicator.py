@@ -382,6 +382,260 @@ def update_gap_anterior_formulas(
     return updated
 
 
+def _find_mes_actual_columns(ws: Worksheet) -> list[int]:
+    """Find all 'Mes Actual' column indices in row 6 (excluding 'Gap Mes Actual')."""
+    cols = []
+    for col in range(44, 80):
+        val = ws.cell(row=DAY_LETTER_ROW, column=col).value
+        if val and "Mes Actual" in str(val) and "Gap" not in str(val):
+            cols.append(col)
+    return cols
+
+
+def _find_last_billable_day(segments: list, team: str) -> int | None:
+    """Find the last day of the last solid (non-hatched) sprint for a team.
+
+    If a sprint doesn't finish in the month (hatched), it can't be billed,
+    so we take the end_day of the last non-hatched segment.
+    If all segments are hatched or none exist, returns None.
+    """
+    solid_segments = [s for s in segments if not s.is_hatched]
+    if not solid_segments:
+        return None
+    return max(s.end_day for s in solid_segments)
+
+
+def update_revenues_mes_actual_formulas(
+    ws: Worksheet,
+    year: int,
+    month: int,
+    num_days: int,
+) -> int:
+    """Update T_REVENUES_MES_ACTUAL formulas for the current period.
+
+    For each employee row (7-37), generates a formula that sums the
+    corresponding revenue row (row+34) from day 1 to the last billable day
+    of each team's sprint. A sprint is billable only if it completes in the
+    current month (non-hatched).
+
+    Returns the number of cells updated.
+    """
+    from sprint_cert_automation.services.sprint_configurator import read_sprints_from_sheet
+
+    REVENUE_OFFSET = REVENUE_FIRST_ROW - COST_FIRST_ROW  # 34
+
+    team_col = _find_team_column(ws)
+    mes_actual_cols = _find_mes_actual_columns(ws)
+
+    if not mes_actual_cols:
+        return 0
+
+    mes_actual_horas_col = mes_actual_cols[0]
+    day1_col_letter = get_column_letter(FIRST_DAY_COL)
+
+    # Read current sprint configuration from this sheet
+    sprints = read_sprints_from_sheet(ws)
+
+    # For each team, determine last billable day column
+    team_last_billable: dict[str, str | None] = {}
+    for team_key in ("bonificaciones", "subvenciones", "fdr", "transversal"):
+        info = sprints.get(team_key)
+        if info and info.segments:
+            last_day = _find_last_billable_day(info.segments, team_key)
+            if last_day:
+                team_last_billable[team_key] = get_column_letter(
+                    FIRST_DAY_COL + last_day - 1
+                )
+            else:
+                team_last_billable[team_key] = None
+        else:
+            # No sprints configured yet — use last day of month as fallback
+            team_last_billable[team_key] = get_column_letter(
+                FIRST_DAY_COL + num_days - 1
+            )
+
+    updated = 0
+    for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+        rev_row = row + REVENUE_OFFSET
+
+        # Build per-team branches
+        branches = []
+        for team_key, display_name in [
+            ("transversal", "Transversal"),
+            ("bonificaciones", "Bonificaciones"),
+            ("subvenciones", "Subvenciones"),
+            ("fdr", "Fondos de Reserva"),
+        ]:
+            end_col_letter = team_last_billable.get(team_key)
+            if end_col_letter:
+                expr = f"SUM({day1_col_letter}{rev_row}:{end_col_letter}{rev_row})"
+            else:
+                expr = "0"
+            branches.append((display_name, expr))
+
+        # Build nested IF formula
+        formula = (
+            f'=IF({team_col}{rev_row}="{branches[0][0]}",{branches[0][1]},'
+            f'IF({team_col}{rev_row}="{branches[1][0]}",{branches[1][1]},'
+            f'IF({team_col}{rev_row}="{branches[2][0]}",{branches[2][1]},'
+            f'IF({team_col}{rev_row}="{branches[3][0]}",{branches[3][1]},0))))'
+        )
+
+        ws.cell(row=row, column=mes_actual_horas_col).value = formula
+        updated += 1
+
+    # Second Mes Actual column (Factura) = horas × tarifa
+    if len(mes_actual_cols) >= 2:
+        mes_actual_factura_col = mes_actual_cols[1]
+        horas_letter = get_column_letter(mes_actual_horas_col)
+
+        # Find tarifa column
+        tarifa_col_letter = None
+        for col in range(1, 12):
+            header = ws.cell(row=DAY_LETTER_ROW, column=col).value
+            if header and "Tarifa" in str(header):
+                tarifa_col_letter = get_column_letter(col)
+                break
+
+        if tarifa_col_letter is None:
+            existing = ws.cell(row=COST_FIRST_ROW, column=mes_actual_factura_col).value
+            if existing and isinstance(existing, str) and "*" in existing:
+                parts = existing.replace("=", "").split("*")
+                if len(parts) == 2:
+                    ref = parts[1].strip()
+                    tarifa_col_letter = "".join(c for c in ref if c.isalpha())
+
+        if tarifa_col_letter:
+            for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+                formula = f"={horas_letter}{row}*{tarifa_col_letter}{row}"
+                ws.cell(row=row, column=mes_actual_factura_col).value = formula
+                updated += 1
+
+    return updated
+
+
+def _find_gap_mes_actual_columns(ws: Worksheet) -> list[int]:
+    """Find all 'Gap Mes Actual' column indices in row 6."""
+    cols = []
+    for col in range(44, 80):
+        val = ws.cell(row=DAY_LETTER_ROW, column=col).value
+        if val and str(val) == "Gap Mes Actual":
+            cols.append(col)
+    return cols
+
+
+def update_revenues_no_fact_formulas(
+    ws: Worksheet,
+    year: int,
+    month: int,
+    num_days: int,
+) -> int:
+    """Update T_REVENUES_PERIODO_ACTUAL_NO_FACT formulas for the current period.
+
+    For each employee row (7-37), generates a formula that sums the
+    corresponding revenue row (row+34) from the first non-billable day
+    to the last day of the month. Non-billable days start after the last
+    completed (solid) sprint.
+
+    - Transversal and FdR always return 0 (they complete in-month).
+    - If all sprints are solid and cover the full month, returns 0.
+
+    Returns the number of cells updated.
+    """
+    from sprint_cert_automation.services.sprint_configurator import read_sprints_from_sheet
+
+    REVENUE_OFFSET = REVENUE_FIRST_ROW - COST_FIRST_ROW  # 34
+
+    team_col = _find_team_column(ws)
+    gap_mes_actual_cols = _find_gap_mes_actual_columns(ws)
+
+    if not gap_mes_actual_cols:
+        return 0
+
+    gap_horas_col = gap_mes_actual_cols[0]
+    last_day_col_letter = get_column_letter(FIRST_DAY_COL + num_days - 1)
+
+    # Read current sprint configuration
+    sprints = read_sprints_from_sheet(ws)
+
+    # For each team, determine the first non-billable day column
+    team_non_billable_start: dict[str, str | None] = {}
+    for team_key in ("bonificaciones", "subvenciones", "fdr", "transversal"):
+        info = sprints.get(team_key)
+        if info and info.segments:
+            last_day = _find_last_billable_day(info.segments, team_key)
+            if last_day and last_day < num_days:
+                # Non-billable starts at last_billable_day + 1
+                team_non_billable_start[team_key] = get_column_letter(
+                    FIRST_DAY_COL + last_day
+                )
+            else:
+                # All days are billable (or last solid covers entire month)
+                team_non_billable_start[team_key] = None
+        else:
+            team_non_billable_start[team_key] = None
+
+    updated = 0
+    for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+        rev_row = row + REVENUE_OFFSET
+
+        # Build per-team branches
+        branches = []
+        for team_key, display_name in [
+            ("transversal", "Transversal"),
+            ("bonificaciones", "Bonificaciones"),
+            ("subvenciones", "Subvenciones"),
+            ("fdr", "Fondos de Reserva"),
+        ]:
+            start_col_letter = team_non_billable_start.get(team_key)
+            if start_col_letter:
+                if start_col_letter == last_day_col_letter:
+                    expr = f"{start_col_letter}{rev_row}"
+                else:
+                    expr = f"SUM({start_col_letter}{rev_row}:{last_day_col_letter}{rev_row})"
+            else:
+                expr = "0"
+            branches.append((display_name, expr))
+
+        formula = (
+            f'=IF({team_col}{rev_row}="{branches[0][0]}",{branches[0][1]},'
+            f'IF({team_col}{rev_row}="{branches[1][0]}",{branches[1][1]},'
+            f'IF({team_col}{rev_row}="{branches[2][0]}",{branches[2][1]},'
+            f'IF({team_col}{rev_row}="{branches[3][0]}",{branches[3][1]},0))))'
+        )
+
+        ws.cell(row=row, column=gap_horas_col).value = formula
+        updated += 1
+
+    # Second Gap Mes Actual column (Factura) = horas × tarifa
+    if len(gap_mes_actual_cols) >= 2:
+        gap_factura_col = gap_mes_actual_cols[1]
+        horas_letter = get_column_letter(gap_horas_col)
+
+        tarifa_col_letter = None
+        for col in range(1, 12):
+            header = ws.cell(row=DAY_LETTER_ROW, column=col).value
+            if header and "Tarifa" in str(header):
+                tarifa_col_letter = get_column_letter(col)
+                break
+
+        if tarifa_col_letter is None:
+            existing = ws.cell(row=COST_FIRST_ROW, column=gap_factura_col).value
+            if existing and isinstance(existing, str) and "*" in existing:
+                parts = existing.replace("=", "").split("*")
+                if len(parts) == 2:
+                    ref = parts[1].strip()
+                    tarifa_col_letter = "".join(c for c in ref if c.isalpha())
+
+        if tarifa_col_letter:
+            for row in range(COST_FIRST_ROW, COST_LAST_ROW + 1):
+                formula = f"={horas_letter}{row}*{tarifa_col_letter}{row}"
+                ws.cell(row=row, column=gap_factura_col).value = formula
+                updated += 1
+
+    return updated
+
+
 def duplicate_sheet(
     workbook_path: Path,
     source_sheet_name: str,
@@ -401,6 +655,8 @@ def duplicate_sheet(
     5. Fill empty cost cells on working days with the appropriate formula.
     6. Configure sprint segments (T_SPRINTS rows 1-4) based on previous period.
     7. Update T_GAP_PERIODO_ANTERIOR formulas to reference previous sheet.
+    8. Update T_REVENUES_MES_ACTUAL formulas based on current sprint ranges.
+    9. Update T_REVENUES_PERIODO_ACTUAL_NO_FACT formulas for non-billable days.
     """
     from sprint_cert_automation.services.sprint_configurator import configure_sprints
 
@@ -474,6 +730,12 @@ def duplicate_sheet(
     # 7. Update Gap Mes Anterior formulas
     if previous_sheet_name and prev_ws:
         update_gap_anterior_formulas(new_ws, previous_sheet_name, prev_ws)
+
+    # 8. Update Revenues Mes Actual formulas
+    update_revenues_mes_actual_formulas(new_ws, year, month, actual_days)
+
+    # 9. Update Revenues Periodo Actual No Facturable formulas
+    update_revenues_no_fact_formulas(new_ws, year, month, actual_days)
 
     # Save
     wb.save(str(workbook_path))
