@@ -1,292 +1,155 @@
 # Sprint Certificate Automation
 
-Generate monthly sprint certification `.xlsm` files from a Forecast workbook and a certification template.
+Herramienta CLI para automatizar la gestión de certificaciones de sprints y la preparación de periodos mensuales en el libro Excel de Forecast Fundae.
 
-## Architecture
+## Casos de uso
 
-- Python business engine:
-  - Reads forecast workbook in read-only mode.
-  - Detects sprint windows from FY sheets.
-  - Applies billing rules (sprint ends in target month and is not hatched).
-  - Computes holidays, sprint hours, and free hours per technician.
-- Template writer:
-  - Copies the `.xlsm` template.
-  - Fills `Config` sheet fields and team tables.
-  - Writes one certificate per billable sprint.
-- Packaging:
-  - Produces one ZIP with all generated certificates.
+### 1. Generación de certificados de sprint
 
-## Folder layout
+Genera ficheros `.xlsm` de certificación mensual a partir del libro Forecast y una plantilla de certificación.
 
-- `config/`: local mappings and rules config.
-- `src/sprint_cert_automation/`: python source code.
-- `scripts/`: launch scripts for Windows.
-- `tests/`: unit tests for pure business rules.
-
-## Use Every Time You Open VS Code
-
-Use this checklist from inside `cert_automation`.
-
-1. Open terminal in project folder:
+**Flujo completo:**
 
 ```powershell
-cd cert_automation
-```
-
-2. Ensure local environment exists and is up to date:
-
-```powershell
-.\scripts\setup_env.ps1
-```
-
-3. (Optional) Activate venv for interactive commands:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-4. Run tests before generating files:
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
-
-5. Run monthly generation in dry-run mode first:
-
-```powershell
+# 1. Dry-run para validar entradas
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
   --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
-  --year 2026 `
-  --month 6 `
-  --dry-run
-```
+  --year 2026 --month 6 --dry-run
 
-Important: `--dry-run` does not write files. It only validates inputs and shows planned output paths.
-
-Output path is fixed to:
-
-`cert_automation/certificaciones/<YYYY-MM>`
-
-For the command above, output folder is:
-
-`cert_automation/certificaciones/2026-06`
-
-6. Run real generation:
-
-```powershell
+# 2. Generación real de certificados
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
   --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
   --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
-  --year 2026 `
-  --month 6
-```
+  --year 2026 --month 6
 
-7. After manual visual validation, execute macro + PDF export:
+# 3. Revisión manual en Excel de los ficheros generados
 
-```powershell
+# 4. Exportación a PDF (ejecuta macro + exporta)
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
-  --year 2026 `
-  --month 6
+  --year 2026 --month 6
 ```
 
-This command scans `certificaciones/YYYY-MM`, executes macro `SELECCIONAR_HOJAS_INFORME` in each `.xlsm`, and writes a `.pdf` with the same base name next to each workbook using the resulting selected sheets.
+**Salida:** `certificaciones/2026-06/` con un `.xlsm` y `.pdf` por cada sprint facturable.
 
-8. Duplicate a period sheet for a new month:
+**Qué hace internamente:**
+- Lee el forecast en modo solo lectura.
+- Detecta ventanas de sprint desde las hojas FY (mes anterior + mes objetivo).
+- Aplica reglas de facturación: un sprint es facturable si su fecha fin cae en el mes objetivo y no está rayado (hatched).
+- Calcula festivos, horas de sprint y horas libres por técnico.
+- Copia la plantilla `.xlsm`, rellena la hoja `Config` y las tablas de equipo.
+- Genera un certificado por sprint facturable y empaqueta en ZIP.
+
+---
+
+### 2. Duplicado de periodo mensual
+
+Crea una nueva pestaña de periodo en el libro Forecast a partir de `Template_Mes`, configurándola automáticamente para el mes indicado.
+
+**Uso básico (sin periodo anterior):**
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli duplicate-sheet `
   --forecast "./inputs/Fundae_Forecast_Copilot_v2.xlsx" `
   --source "Template_Mes" `
   --target "FY27_dic" `
-  --year 2026 `
-  --month 12
+  --year 2026 --month 12 --dry-run
 ```
 
-This command copies the source sheet, renames it, positions it right after the source, and adapts the calendar (day numbers and weekday letters) for the target month. It also removes gray fills from the cost table, fills empty weekday cells with the appropriate formula, and configures sprint segments (T_SPRINTS) based on team rules.
-
-Use `--previous` to specify the previous period sheet so sprint carry-over and numbering are calculated correctly:
+**Uso completo (con periodo anterior para carry-over de sprints):**
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli duplicate-sheet `
   --forecast "./inputs/Fundae_Forecast_Copilot_v2.xlsx" `
   --source "Template_Mes" `
   --target "FY27_dic" `
-  --year 2026 `
-  --month 12 `
+  --year 2026 --month 12 `
   --previous "FY27_nov"
 ```
 
-Sprint rules applied automatically:
-- **Bonificaciones**: 10 working days per sprint, carry-over from previous period.
-- **Subvenciones**: 16 working days per sprint, carry-over from previous period.
-- **Fondos de Reserva**: two sprints per month (days 1-15 and 16-last), sequential numbering.
-- **Transversal**: one sprint spanning the entire month, named with the Spanish month name.
+**Pasos que ejecuta automáticamente:**
 
-Sprints that extend beyond the month are shown with hatched fill. Use `--dry-run` to preview without modifying the workbook.
+| Paso | Acción | Detalle |
+|------|--------|---------|
+| 1 | Copiar pestaña | Duplica la hoja fuente y la renombra |
+| 2 | Posicionar | La sitúa inmediatamente después de la fuente |
+| 3 | Calendario | Rellena números de día (fila 5) y letras de día en español (fila 6) |
+| 4 | Limpiar grises | Elimina rellenos grises de T_COST_HOURS_ONLY |
+| 5 | Fórmulas de coste | Rellena celdas vacías en días laborables con fórmulas de horas |
+| 6 | Configurar sprints | Calcula T_SPRINTS (filas 1-4) con carry-over del periodo anterior |
+| 7 | Gap Periodo Anterior | Fórmulas que suman horas de revenue del sprint no finalizado en el mes anterior |
+| 8 | Revenues Mes Actual | Fórmulas que suman horas de revenue del rango facturable de cada equipo |
+| 9 | Revenues No Facturable | Fórmulas que suman horas de revenue del rango NO facturable (sprint incompleto) |
 
-## Quick start (first run)
+**Reglas de sprints por equipo:**
 
-1. Create and populate local virtual environment in `cert_automation/.venv`:
+| Equipo | Duración | Carry-over | Nomenclatura |
+|--------|----------|------------|--------------|
+| Bonificaciones | 10 días laborables | Sí (hatched=darkDown) | `Bonificaciones - SP{N}` |
+| Subvenciones | 16 días laborables | Sí (hatched=lightDown) | `Subvenciones - SP{N}` |
+| Fondos de Reserva | Días 1-15 y 16-último | No | `Fondos de Reserva - SP{N}` |
+| Transversal | Mes completo | No | `Transversal - {mes_español}` |
+
+---
+
+## Estructura del proyecto
+
+```
+cert_automation/
+├── config/                  # Mappings y configuración local
+├── docs/                    # Documentación funcional
+├── inputs/                  # Ficheros Excel (gitignored)
+├── scripts/                 # Scripts de arranque Windows
+├── src/sprint_cert_automation/
+│   ├── cli.py              # Punto de entrada CLI (argparse)
+│   ├── app.py              # Orquestación de casos de uso
+│   ├── domain/             # Modelos y reglas de negocio
+│   │   ├── models.py       # Dataclasses (Sprint, Technician, etc.)
+│   │   └── rules.py        # Reglas de facturación
+│   ├── services/           # Lógica de aplicación
+│   │   ├── certificate_service.py   # Generación de certificados
+│   │   ├── forecast_reader.py       # Lectura del forecast
+│   │   ├── sheet_duplicator.py      # Duplicado de periodos
+│   │   ├── sprint_configurator.py   # Cálculo y escritura de sprints
+│   │   ├── template_writer.py       # Escritura en plantilla .xlsm
+│   │   └── macro_export_service.py  # Export PDF via COM
+│   ├── infrastructure/     # Adaptadores (Excel COM)
+│   └── utils/              # Utilidades (fechas, etc.)
+├── tests/                   # Tests unitarios
+└── certificaciones/         # Salida generada (gitignored)
+```
+
+## Setup
 
 ```powershell
+# Crear entorno virtual y dependencias
 .\scripts\setup_env.ps1
-```
 
-2. Optional: activate local environment for interactive work:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-3. Install dependencies manually through local environment only (if needed):
-
-```powershell
+# O manualmente:
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m pip install -e .
+
+# Ejecutar tests
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-The editable install is required so `python -m sprint_cert_automation.cli` resolves the package from `src/`.
+El install editable (`-e .`) es necesario para que `python -m sprint_cert_automation.cli` resuelva el paquete desde `src/`.
 
-4. Run monthly generation (dry-run first):
+## Notas
 
-```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
-  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
-  --year 2026 `
-  --month 6 `
-  --dry-run
-```
-
-5. Run real generation:
-
-```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli `
-  --forecast "./inputs/Fundae_Forecast_Copilot.xlsx" `
-  --template "./inputs/plantilla de Inf_Certificacion 20251.xlsm" `
-  --year 2026 `
-  --month 6
-```
-
-6. Run post-validation PDF export:
-
-```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
-  --year 2026 `
-  --month 6
-```
-
-Optional dry-run:
-
-```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
-  --year 2026 `
-  --month 6 `
-  --dry-run
-```
-
-## Notes
-
-- Keep sensitive forecast/template files inside `cert_automation/inputs/`.
-- `inputs/` and all Excel extensions (`.xlsx`, `.xlsm`, `.xlsb`, `.xls`) are ignored by Git.
-- The process never modifies the forecast source workbook.
-- If generation fails due to missing FY sheet names, verify year/month and workbook tabs.
-- Generated files are always written under `cert_automation/certificaciones/<YYYY-MM>`.
+- Los ficheros Excel de entrada van en `inputs/` (ignorado por Git).
+- La generación de certificados **nunca modifica** el workbook de forecast.
+- El duplicado de periodos **sí modifica** el workbook de forecast (crea una nueva pestaña).
+- Salida de certificados siempre en `certificaciones/<YYYY-MM>`.
+- Usar `--dry-run` en cualquier comando para previsualizar sin efectos.
 
 ## Troubleshooting
 
-### 1) `Technician column 'Técnico' not found in forecast sheet`
-
-Cause:
-- The parser now requires `Técnico` header in the sheet used to build workloads.
-
-Fix:
-- Verify the target FY sheet has a `Técnico` column in header row 6.
-- If month structure differs, update forecast source or parser mapping accordingly.
-
-### 2) `Forecast sheet not found: FYxx_mon`
-
-Cause:
-- The requested `--year` and `--month` do not match existing FY tab names.
-
-Fix:
-- Check workbook sheet names (`FY26_mayo`, `FY26_jun`, etc.).
-- Re-run with the correct year/month.
-
-### 3) `Category '...' is not available in template dropdown options`
-
-Cause:
-- A category from forecast cannot be mapped to template table `TB_Perfiles`.
-
-Fix:
-- Confirm category exists in template (`Maestra` -> `TB_Perfiles`).
-- Add/adjust alias mapping in `template_writer.py` if needed.
-
-### 4) `No module named ...` or package/import errors
-
-Cause:
-- Virtual environment is missing or stale.
-
-Fix:
-- Recreate/update environment:
-
-```powershell
-.\scripts\setup_env.ps1
-```
-
-### 5) I need a custom output path
-
-Cause:
-- Current behavior enforces a fixed output location.
-
-Fix:
-- Use generated files from:
-
-`cert_automation/certificaciones/<YYYY-MM>`
-
-- The `-OutputDir` argument in `scripts/run_month.ps1` is currently ignored.
-
-### 6) `scripts/run_month.ps1` warns that `-OutputDir` is ignored
-
-Cause:
-- This is expected after enforcing fixed output path.
-
-Fix:
-- Remove `-OutputDir` from your manual calls.
-- Keep using `--year` and `--month` to control destination subfolder.
-
-### 8) Macro export fails with "Cannot run the macro"
-
-Cause:
-- Macro security settings or macro name do not allow execution from COM.
-
-Fix:
-- Confirm macro `SELECCIONAR_HOJAS_INFORME` exists in the generated workbook.
-- Ensure the workbook is in a trusted location and macros are enabled.
-- If needed, pass an explicit macro name:
-
-```powershell
-.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-pdf `
-  --year 2026 `
-  --month 6 `
-  --macro-name "SELECCIONAR_HOJAS_INFORME"
-```
-
-### 7) Warnings from `openpyxl` about unsupported extensions
-
-Cause:
-- The template contains Excel extensions (`Data Validation`, `Conditional Formatting`, etc.) that `openpyxl` warns about.
-
-Fix:
-- Warnings are expected in current implementation.
-- Validate generated output in Excel; if strict fidelity is required, move template write path to Excel COM.
-
-## Current status
-
-Current implementation covers end-to-end generation:
-
-- Forecast sprint detection and billable filtering.
-- Holiday detection and team workload extraction.
-- Category normalization against template dropdown values.
-- Certificate writing and zip packaging.
+| Error | Causa | Solución |
+|-------|-------|----------|
+| `Technician column 'Técnico' not found` | La hoja FY no tiene columna Técnico | Verificar cabecera en fila 6 |
+| `Forecast sheet not found: FYxx_mon` | Año/mes no coincide con pestañas | Comprobar nombres de pestañas |
+| `Category '...' not available in template` | Categoría sin mapeo en plantilla | Ajustar alias en `template_writer.py` |
+| `No module named ...` | Entorno virtual roto | Ejecutar `.\scripts\setup_env.ps1` |
+| `Cannot run the macro` | Seguridad de macros | Habilitar macros y ubicación de confianza |
+| Warnings de openpyxl | Extensiones Excel no soportadas | Ignorar; validar salida en Excel |
