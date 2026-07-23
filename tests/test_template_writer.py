@@ -3,6 +3,7 @@ from datetime import date
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import PatternFill
 from openpyxl.worksheet.table import Table, TableStyleInfo
+from openpyxl.utils.datetime import CALENDAR_MAC_1904, CALENDAR_WINDOWS_1900
 
 from sprint_cert_automation.domain.models import CertificateDraft, Holiday, TeamMember, TeamMemberWorkload
 from sprint_cert_automation.services.template_writer import TemplateWriter
@@ -137,6 +138,33 @@ def test_template_writer_expands_tables_when_needed(tmp_path) -> None:
         workbook.close()
 
 
+def test_template_writer_converts_com_dates_to_excel_serials(tmp_path) -> None:
+    writer = TemplateWriter(tmp_path / "template.xlsm")
+
+    assert writer._to_excel_serial_date(date(2026, 7, 1), CALENDAR_WINDOWS_1900) == 46204.0
+    assert writer._to_excel_serial_date(date(2026, 7, 1), CALENDAR_MAC_1904) == 44742.0
+
+
+def test_template_writer_writes_com_config_as_serial_dates(tmp_path) -> None:
+    writer = TemplateWriter(tmp_path / "template.xlsm")
+    draft = CertificateDraft(
+        team="Bonificaciones",
+        sprint_id="SP280",
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 20),
+        file_name="unused.xlsm",
+        product_label="Bonificaciones",
+    )
+    worksheet = _FakeComWorksheet(date1904=False)
+
+    writer._write_config_com(worksheet, draft)
+
+    assert worksheet.ranges["A2"].Value2 == 46204.0
+    assert worksheet.ranges["B2"].Value2 == 46223.0
+    assert worksheet.ranges["D2"].Value == "SP280"
+    assert worksheet.ranges["G3"].Value == "Bonificaciones"
+
+
 def _build_template(path, holiday_rows: int = 8, team_rows: int = 4) -> None:
     workbook = Workbook()
     worksheet = workbook.active
@@ -182,3 +210,29 @@ def _build_template(path, holiday_rows: int = 8, team_rows: int = 4) -> None:
 
     workbook.save(path)
     workbook.close()
+
+
+class _FakeComWorksheet:
+    def __init__(self, date1904: bool) -> None:
+        self.Parent = _FakeComWorkbook(date1904)
+        self.ranges = {
+            "A2": _FakeComRange(),
+            "B2": _FakeComRange(),
+            "D2": _FakeComRange(),
+            "G3": _FakeComRange(),
+        }
+
+    def Range(self, address: str) -> "_FakeComRange":
+        return self.ranges[address]
+
+
+class _FakeComWorkbook:
+    def __init__(self, date1904: bool) -> None:
+        self.Date1904 = date1904
+
+
+class _FakeComRange:
+    def __init__(self) -> None:
+        self.Value = None
+        self.Value2 = None
+        self.NumberFormat = None

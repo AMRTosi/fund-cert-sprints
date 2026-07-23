@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from copy import copy
-from datetime import datetime, time
 import os
 from pathlib import Path
 from shutil import copy2
 import unicodedata
 
 from openpyxl import load_workbook
+from openpyxl.utils.datetime import CALENDAR_MAC_1904, CALENDAR_WINDOWS_1900, to_excel
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from sprint_cert_automation.domain.models import CertificateDraft
@@ -98,8 +98,9 @@ class TemplateWriter:
             excel.Quit()
 
     def _write_config_com(self, worksheet, draft: CertificateDraft) -> None:
-        worksheet.Range("A2").Value = self._to_excel_date(draft.start_date)
-        worksheet.Range("B2").Value = self._to_excel_date(draft.end_date)
+        epoch = self._excel_epoch_for_com_worksheet(worksheet)
+        worksheet.Range("A2").Value2 = self._to_excel_serial_date(draft.start_date, epoch)
+        worksheet.Range("B2").Value2 = self._to_excel_serial_date(draft.end_date, epoch)
         worksheet.Range("D2").Value = self._display_sprint_id(draft)
         worksheet.Range("G3").Value = self._product_label(draft)
 
@@ -186,8 +187,12 @@ class TemplateWriter:
 
         raise ValueError("Could not resolve category dropdown options from template")
 
-    def _to_excel_date(self, value) -> datetime:
-        return datetime.combine(value, time.min)
+    def _excel_epoch_for_com_worksheet(self, worksheet):
+        workbook = worksheet.Parent
+        return CALENDAR_MAC_1904 if bool(workbook.Date1904) else CALENDAR_WINDOWS_1900
+
+    def _to_excel_serial_date(self, value, epoch) -> float:
+        return float(to_excel(value, epoch))
 
     def _format_date_ddmmyyyy(self, value) -> str:
         return f"{value.day:02d}-{value.month:02d}-{value.year:04d}"
