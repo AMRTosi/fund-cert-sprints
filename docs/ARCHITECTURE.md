@@ -1,6 +1,6 @@
 # Arquitectura y diseño técnico
 
-Documento de referencia técnica para futuras modificaciones del código. Complementa la documentación funcional existente en `docs/`.
+Documento de referencia técnica para futuras modificaciones del código.
 
 ## Visión general
 
