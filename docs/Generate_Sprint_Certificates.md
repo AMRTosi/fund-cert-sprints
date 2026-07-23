@@ -47,13 +47,18 @@ Este documento describe el comportamiento real implementado en el codigo para ge
    - y no esta rayado en la hoja del mes objetivo
 
 2. Horas sprint:
-   - Se calculan por dia laborable real del rango del sprint (excluye fines de semana y festivos).
+   - Se calculan solo por los dias del rango del sprint comprendidos entre lunes y viernes (ambos incluidos).
+   - El valor es comun para todos los tecnicos del sprint.
    - Horas por dia:
    - 7.5 entre el 15 de junio y el 14 de septiembre, ambos incluidos.
    - 8.5 el resto del anio.
 
 3. Horas libres:
-   - Se calculan como numero de dias no laborables del tecnico dentro del sprint por 8.5.
+   - Se calculan sumando las horas diarias de cada dia no laborable del tecnico dentro del sprint, solo de lunes a viernes.
+   - Horas por cada dia no laborable:
+   - 7.5 entre el 15 de junio y el 14 de septiembre, ambos incluidos.
+   - 8.5 el resto del anio.
+   - Los dias en blanco/gris que caen en sabado o domingo no computan horas libres.
    - No se cuentan como horas libres las celdas grises que coinciden con un dia festivo.
 
 ## Escritura en plantilla implementada

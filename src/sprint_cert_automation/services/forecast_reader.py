@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 import re
 
@@ -10,7 +10,7 @@ from openpyxl.styles import PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
 from sprint_cert_automation.domain.models import Holiday, SprintWindow, TeamMember, TeamMemberWorkload
-from sprint_cert_automation.domain.rules import free_hours_from_non_working_days, sprint_hours
+from sprint_cert_automation.domain.rules import free_hours_from_non_working_dates, sprint_hours_between_dates
 from sprint_cert_automation.utils.dates import previous_month, year_month_label
 
 TEAM_ROWS = {
@@ -36,7 +36,6 @@ MONTH_TOKENS = {
 }
 
 SPRINT_ID_PATTERN = re.compile(r"SP\d+", re.IGNORECASE)
-DEFAULT_DAY_HOURS = 8.5
 HEADER_ROW = 6
 CALENDAR_ROW = 5
 DATA_START_ROW = 7
@@ -326,11 +325,11 @@ class ForecastReader:
         target_context = contexts[-1]
         team_members = self._team_members(target_context, sprint.team)
         holiday_dates = {holiday.holiday_date for holiday in holidays}
-        total_sprint_hours = self._sprint_hours_between(sprint.start_date, sprint.end_date, holiday_dates)
+        total_sprint_hours = sprint_hours_between_dates(sprint.start_date, sprint.end_date)
 
         workloads: list[TeamMemberWorkload] = []
         for member in team_members:
-            non_working_days = 0
+            non_working_dates: set[date] = set()
             for context in contexts:
                 row_index = context.member_rows.get(member.name)
                 if row_index is None:
@@ -341,12 +340,12 @@ class ForecastReader:
                         continue
                     cell = context.worksheet.cell(row=row_index, column=column_index)
                     if self._is_non_working_fill(cell.fill):
-                        non_working_days += 1
+                        non_working_dates.add(day_date)
             workloads.append(
                 TeamMemberWorkload(
                     member=member,
                     sprint_hours=total_sprint_hours,
-                    free_hours=free_hours_from_non_working_days(non_working_days, DEFAULT_DAY_HOURS),
+                    free_hours=free_hours_from_non_working_dates(non_working_dates),
                 )
             )
 
@@ -398,39 +397,6 @@ class ForecastReader:
             if sprint.start_date <= day_date <= sprint.end_date:
                 columns.append(column_index)
         return columns
-
-    def _sprint_hours_between(
-        self,
-        start_date: date,
-        end_date: date,
-        holidays: set[date],
-    ) -> float:
-        total_hours = 0.0
-        cursor = start_date
-        while cursor <= end_date:
-            if cursor.weekday() < 5 and cursor not in holidays:
-                total_hours += self._day_hours_for_date(cursor)
-            cursor = cursor + timedelta(days=1)
-        return total_hours
-
-    def _day_hours_for_date(self, day: date) -> float:
-        if (day.month == 6 and day.day >= 15) or day.month in {7, 8} or (day.month == 9 and day.day <= 14):
-            return 7.5
-        return 8.5
-
-    def _working_days_between(
-        self,
-        start_date: date,
-        end_date: date,
-        holidays: set[date],
-    ) -> int:
-        working_days = 0
-        cursor = start_date
-        while cursor <= end_date:
-            if cursor.weekday() < 5 and cursor not in holidays:
-                working_days += 1
-            cursor = date.fromordinal(cursor.toordinal() + 1)
-        return working_days
 
     def _normalize_team_name(self, value: str) -> str:
         normalized = " ".join(value.split())

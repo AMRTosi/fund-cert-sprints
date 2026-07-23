@@ -131,7 +131,7 @@ def test_reader_builds_real_holidays_and_workloads_for_cross_month_sprint(tmp_pa
     by_name = {workload.member.name: workload for workload in workloads}
     assert by_name["Ana"].member.billing_line == "Equipo Desarrollo"
     assert by_name["Ana"].member.category == "Consultor"
-    assert by_name["Ana"].sprint_hours == 8.5
+    assert by_name["Ana"].sprint_hours == 25.5
     assert by_name["Ana"].free_hours == 0.0
     assert by_name["Luis"].member.category == "Analista"
     assert by_name["Luis"].free_hours == 0.0
@@ -168,6 +168,45 @@ def test_reader_uses_summer_day_hours_between_june_15_and_september_15(tmp_path)
 
     assert len(workloads) == 1
     assert workloads[0].sprint_hours == 22.5
+
+
+def test_reader_calculates_free_hours_with_mixed_season_day_rates(tmp_path) -> None:
+    workbook_path = tmp_path / "forecast.xlsx"
+    workbook = Workbook()
+    may_sheet = workbook.active
+    may_sheet.title = "FY26_mayo"
+    june_sheet = workbook.create_sheet("FY26_jun")
+
+    _populate_headers_may(may_sheet)
+    _populate_headers_june(june_sheet)
+    _populate_day_row(may_sheet, start_column=12, days=31)
+    _populate_day_row(june_sheet, start_column=13, days=30)
+
+    grey_fill = PatternFill(patternType="solid", fgColor="D0D0D0")
+
+    june_sheet.merge_cells(start_row=1, start_column=26, end_row=1, end_column=28)
+    june_sheet.cell(row=1, column=26).value = "Bonificaciones - SP301"
+
+    june_sheet.cell(row=7, column=2).value = "Ana"
+    june_sheet.cell(row=7, column=3).value = "Ana"
+    june_sheet.cell(row=7, column=4).value = "Equipo Desarrollo"
+    june_sheet.cell(row=7, column=5).value = "Consultor"
+    june_sheet.cell(row=7, column=6).value = "Bonificaciones"
+
+    june_sheet.cell(row=7, column=26).fill = grey_fill
+    june_sheet.cell(row=7, column=28).fill = grey_fill
+
+    workbook.save(workbook_path)
+
+    reader = ForecastReader(workbook_path)
+    sprint = next(
+        item for item in reader.read_sprints_for_target_window(2026, 6) if item.sprint_id == "SP301"
+    )
+    _, workloads = reader.read_draft_data_for_sprint(sprint)
+
+    assert len(workloads) == 1
+    assert workloads[0].sprint_hours == 15.0
+    assert workloads[0].free_hours == 7.5
 
 
 def _populate_day_row(worksheet, start_column: int, days: int) -> None:

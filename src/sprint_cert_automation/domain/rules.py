@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Iterable
 
 from .models import SprintWindow
 
@@ -20,6 +21,36 @@ def select_billable_sprints(
     month: int,
 ) -> list[SprintWindow]:
     return [s for s in sprints if is_billable_in_month(s, year, month)]
+
+
+def day_hours_for_date(day: date) -> float:
+    """Return nominal hours for a calendar day according to summer schedule."""
+    if (day.month == 6 and day.day >= 15) or day.month in {7, 8} or (day.month == 9 and day.day <= 14):
+        return 7.5
+    return 8.5
+
+
+def sprint_hours_between_dates(start_date: date, end_date: date) -> float:
+    """Sum nominal hours for weekdays in an inclusive sprint window."""
+    if end_date < start_date:
+        raise ValueError("end_date cannot be before start_date")
+
+    total_hours = 0.0
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() < 5:
+            total_hours += day_hours_for_date(cursor)
+        cursor = date.fromordinal(cursor.toordinal() + 1)
+    return total_hours
+
+
+def free_hours_from_non_working_dates(non_working_dates: Iterable[date]) -> float:
+    """Sum free hours from weekday non-working dates using seasonal nominal hours."""
+    total_hours = 0.0
+    for non_working_date in non_working_dates:
+        if non_working_date.weekday() < 5:
+            total_hours += day_hours_for_date(non_working_date)
+    return total_hours
 
 
 def free_hours_from_non_working_days(non_working_days: int, day_hours: float = 8.5) -> float:
