@@ -25,8 +25,17 @@ Reflejan las horas que supone cada empleado por día de coste y que se pueden fa
 ### T_SPRINTS
 Representan los sprints que se realizan durante el mes natural. La fila 1 es para el equipo de bonificaciones, 2 para Subvenciones, 3 para Fondos de Reserva y 4 para Transversal. Se agrupan las celdas de cada fila en esta tabla para representar la duración del sprint. Gracias a la tabla T_CALENDARIO se puede ver cuándo inicia y finaliza el sprint y con la tabla T_TIMSHEET Y T_REVENUES_TIMESHEET sabremos cuántas horas de coste y de revenues tenemos para cada sprint.
 ### T_GAP_PERIODO_ANTERIOR
-Muestra el acumulado de horas por persona del periodo anterior que no se pudieron facturar. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo anterior.
+Muestra el acumulado de horas por persona del periodo anterior que no se pudieron facturar. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo anterior. El valor de estas horas va asociado a la tabla T_REVENUES_TIMESHEET del periodo anterior
 ### T_REVENUES_MES_ACTUAL
-Muestra el acumulado por persona de horas del periodo actual que se podrán facturar. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo actual.
+Muestra el acumulado por persona de horas del periodo actual que se podrán facturar. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo actual. El valor de estas horas va asociado a la tabla T_REVENUES_TIMESHEET
 ### T_REVENUES_PERIODO_ACTUAL_NO_FACT
-Muestra el acumulado por persona de horas del periodo actual que no se podrán facturar y que quedarán pendientes para el siguiente periodo. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo actual y que no se van a poder facturar.
+Muestra el acumulado por persona de horas del periodo actual que no se podrán facturar y que quedarán pendientes para el siguiente periodo. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo actual y que no se van a poder facturar. El valor de estas horas va asociado a la tabla T_REVENUES_TIMESHEET
+### T_COSTE_GAP_PERIODO_ANTERIOR
+Muestra el acumulado de horas por persona del periodo actual en concepto de coste. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen del sprint del periodo anterior que no se pudo facturar y sirven para controlar el coste asociado que tuvo ese sprint. El valor de estas horas va asociado a la tabla T_COST_HOURS_ONLY
+### T_COSTE_MES_ACTUAL
+Muestra el acumulado por persona de horas del periodo actual que suponen un coste. Las fórmulas de cada celda son necesarias actualizarlas para cada periodo ya que dependen de la duración de los sprints del periodo actual. El valor de estas horas va asociado a la tabla T_COST_HOURS_ONLY
+
+Nota de automatización de duplicado mensual:
+- El proceso `duplicate-sheet` actualiza también las fórmulas de `T_COSTE_GAP_PERIODO_ANTERIOR` y `T_COSTE_MES_ACTUAL`.
+- Para Bonificaciones y Subvenciones aplica la misma lógica de facturabilidad por sprint que en revenue (cola rayada del periodo anterior para GAP y tramo facturable del mes para Mes Actual), pero referenciando siempre filas de coste (`T_COST_HOURS_ONLY`).
+- Para Transversal y Fondos de Reserva, el GAP anterior de coste queda en 0.
