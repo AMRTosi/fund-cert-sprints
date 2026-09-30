@@ -15,11 +15,11 @@ def test_export_cost_hours_table_to_json(tmp_path) -> None:
     _build_workbook_with_table(
         workbook_path,
         table_name="TableHorasCosteQuincenas202609",
-        headers=["reviewee", "email", "horasQuincena1", "horasQuincena2"],
+        headers=["reviewee", "email", "subco", "horasQuincena1", "horasQuincena2"],
         rows=[
-            [1001, "a@acme.com", 80, 72],
-            ["1002", "b@acme.com", 79.0, 70.5],
-            [None, None, None, None],
+            [1001, "a@acme.com", "SC01", 80, 72],
+            ["1002", "b@acme.com", "SC02", 79.0, 70.5],
+            [None, None, None, None, None],
         ],
     )
 
@@ -38,12 +38,14 @@ def test_export_cost_hours_table_to_json(tmp_path) -> None:
         {
             "reviewee": "1001",
             "email": "a@acme.com",
+            "subco": "SC01",
             "horasQuincena1": "80",
             "horasQuincena2": "72",
         },
         {
             "reviewee": "1002",
             "email": "b@acme.com",
+            "subco": "SC02",
             "horasQuincena1": "79",
             "horasQuincena2": "70.5",
         },
@@ -56,8 +58,8 @@ def test_export_fails_when_table_is_missing(tmp_path) -> None:
     _build_workbook_with_table(
         workbook_path,
         table_name="TableHorasCosteQuincenas202609",
-        headers=["reviewee", "email", "horasQuincena1", "horasQuincena2"],
-        rows=[["1001", "a@acme.com", 80, 72]],
+        headers=["reviewee", "email", "subco", "horasQuincena1", "horasQuincena2"],
+        rows=[["1001", "a@acme.com", "SC01", 80, 72]],
     )
 
     with pytest.raises(ValueError, match="Table not found"):
@@ -75,7 +77,7 @@ def test_export_fails_when_required_columns_are_missing(tmp_path) -> None:
     _build_workbook_with_table(
         workbook_path,
         table_name="TableHorasCosteQuincenas202609",
-        headers=["eid", "email", "horasQuincena1", "horasQuincena2"],
+        headers=["reviewee", "email", "horasQuincena1", "horasQuincena2"],
         rows=[["1001", "a@acme.com", 80, 72]],
     )
 
@@ -94,8 +96,8 @@ def test_export_fails_when_table_name_format_is_invalid(tmp_path) -> None:
     _build_workbook_with_table(
         workbook_path,
         table_name="TableHorasCosteQuincenas202609",
-        headers=["reviewee", "email", "horasQuincena1", "horasQuincena2"],
-        rows=[["1001", "a@acme.com", 80, 72]],
+        headers=["reviewee", "email", "subco", "horasQuincena1", "horasQuincena2"],
+        rows=[["1001", "a@acme.com", "SC01", 80, 72]],
     )
 
     with pytest.raises(ValueError, match="TableHorasCosteQuincenasAAAAMM"):
