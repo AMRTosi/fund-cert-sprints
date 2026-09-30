@@ -63,7 +63,7 @@ Pasos:
 1. Valida el patrón del nombre de tabla (`TableHorasCosteQuincenasAAAAMM`).
 2. Abre workbook en modo lectura (`data_only=True`).
 3. Busca tabla por nombre de forma global en todas las hojas.
-4. Lee cabeceras y valida columnas obligatorias: `reviewee`, `horasQuincena1`, `horasQuincena2`.
+4. Lee cabeceras y valida columnas obligatorias: `reviewee`, `email`, `horasQuincena1`, `horasQuincena2`.
 5. Convierte cada fila a objeto JSON (si la fila es completamente vacía, se ignora).
 6. Escribe salida en `out/excel-current-period-cost-hours-excel/<OutputFileName>.json`.
 
@@ -74,6 +74,7 @@ Cada elemento del array JSON tiene esta forma:
 ```json
 {
   "reviewee": "1001",
+  "email": "persona@empresa.com",
   "horasQuincena1": "80",
   "horasQuincena2": "72"
 }
