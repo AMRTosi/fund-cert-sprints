@@ -92,6 +92,39 @@ Crea una nueva pestaña de periodo en el libro Forecast a partir de `Template_Me
 
 ---
 
+### 3. Exportación de horas de coste quincenales a JSON
+
+Lee una tabla del workbook Forecast y genera un JSON con el estado actual del periodo.
+
+**Uso:**
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli export-cost-hours-json `
+  --forecast "./inputs/Delivery_Management_GestionIniciativas.xlsx" `
+  --table-name "TableHorasCosteQuincenas202609" `
+  --output-file-name "excel-cost-hours_2026-09"
+```
+
+**Validaciones aplicadas:**
+- `table-name` debe seguir el patrón `TableHorasCosteQuincenasAAAAMM`.
+- La tabla debe incluir cabeceras `reviewee`, `horasQuincena1` y `horasQuincena2`.
+
+**Salida:** `out/excel-current-period-cost-hours-excel/<OutputFileName>.json`
+
+**Formato JSON:** array de objetos, por ejemplo:
+
+```json
+[
+  {
+    "reviewee": "1001",
+    "horasQuincena1": "80",
+    "horasQuincena2": "72"
+  }
+]
+```
+
+---
+
 ## Estructura del proyecto
 
 ```
@@ -108,6 +141,7 @@ cert_automation/
 │   │   └── rules.py        # Reglas de facturación
 │   ├── services/           # Lógica de aplicación
 │   │   ├── certificate_service.py   # Generación de certificados
+│   │   ├── cost_hours_export_service.py # Exportación de horas quincenales a JSON
 │   │   ├── forecast_reader.py       # Lectura del forecast
 │   │   ├── sheet_duplicator.py      # Duplicado de periodos
 │   │   ├── sprint_configurator.py   # Cálculo y escritura de sprints
@@ -153,3 +187,5 @@ El install editable (`-e .`) es necesario para que `python -m sprint_cert_automa
 | `No module named ...` | Entorno virtual roto | Ejecutar `.\scripts\setup_env.ps1` |
 | `Cannot run the macro` | Seguridad de macros | Habilitar macros y ubicación de confianza |
 | Warnings de openpyxl | Extensiones Excel no soportadas | Ignorar; validar salida en Excel |
+| `Table not found in workbook` | Nombre de tabla incorrecto o no existe | Revisar `--table-name` y el periodo AAAAMM |
+| `Required columns missing in table` | Faltan cabeceras requeridas | Verificar columnas `reviewee`, `horasQuincena1`, `horasQuincena2` |

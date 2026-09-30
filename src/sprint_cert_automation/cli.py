@@ -4,7 +4,12 @@ import argparse
 from pathlib import Path
 import sys
 
-from sprint_cert_automation.app import duplicate_period_sheet, export_certificates_to_pdf, generate_certificates
+from sprint_cert_automation.app import (
+    duplicate_period_sheet,
+    export_certificates_to_pdf,
+    export_current_period_cost_hours,
+    generate_certificates,
+)
 from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.utils.dates import today_year_month
 
@@ -12,6 +17,11 @@ from sprint_cert_automation.utils.dates import today_year_month
 def default_output_dir(year: int, month: int) -> Path:
     project_root = Path(__file__).resolve().parents[2]
     return project_root / "certificaciones" / f"{year:04d}-{month:02d}"
+
+
+def default_cost_hours_output_dir() -> Path:
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / "out" / "excel-current-period-cost-hours-excel"
 
 
 def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
@@ -45,6 +55,12 @@ def _add_duplicate_sheet_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dry-run", action="store_true", help="Show what would be done without modifying the workbook")
 
 
+def _add_export_cost_hours_json_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--forecast", required=True, type=Path, help="Forecast workbook path")
+    parser.add_argument("--table-name", required=True, type=str, help="Excel table name (TableHorasCosteQuincenasAAAAMM)")
+    parser.add_argument("--output-file-name", required=True, type=str, help="Output JSON file name (without extension)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sprint certification automation commands",
@@ -69,13 +85,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_duplicate_sheet_arguments(duplicate_parser)
 
+    export_cost_hours_parser = subparsers.add_parser(
+        "export-cost-hours-json",
+        help="Export cost hours table from forecast workbook to JSON",
+    )
+    _add_export_cost_hours_json_arguments(export_cost_hours_parser)
+
     return parser
 
 
 def _normalize_args(raw_args: list[str]) -> list[str]:
     if not raw_args:
         return ["generate"]
-    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet"}:
+    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet", "export-cost-hours-json"}:
         return raw_args
     return ["generate", *raw_args]
 
@@ -148,6 +170,20 @@ def _run_duplicate_sheet(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_export_cost_hours_json(args: argparse.Namespace) -> int:
+    result = export_current_period_cost_hours(
+        forecast_path=args.forecast,
+        table_name=args.table_name,
+        output_file_name=args.output_file_name,
+        output_root=default_cost_hours_output_dir(),
+    )
+
+    print(f"Exported rows: {result.rows_exported}")
+    print(f"Table: {result.table_name}")
+    print(f"Output JSON: {result.output_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_args = sys.argv[1:] if argv is None else argv
@@ -159,8 +195,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_generate(args)
     if args.command == "duplicate-sheet":
         return _run_duplicate_sheet(args)
+    if args.command == "export-cost-hours-json":
+        return _run_export_cost_hours_json(args)
 
-    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet")
+    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet, export-cost-hours-json")
     return 2
 
 

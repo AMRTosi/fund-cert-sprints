@@ -7,6 +7,10 @@ from sprint_cert_automation.services.certificate_service import (
     CertificateGenerationService,
     GenerationResult,
 )
+from sprint_cert_automation.services.cost_hours_export_service import (
+    CostHoursExportResult,
+    CostHoursExportService,
+)
 from sprint_cert_automation.services.macro_export_service import MacroExportResult, MacroExportService
 from sprint_cert_automation.services.sheet_duplicator import DuplicateSheetResult, duplicate_sheet
 
@@ -60,4 +64,19 @@ def duplicate_period_sheet(
         month=month,
         previous_sheet_name=previous_sheet,
         dry_run=dry_run,
+    )
+
+
+def export_current_period_cost_hours(
+    forecast_path: Path,
+    table_name: str,
+    output_file_name: str,
+    output_root: Path,
+) -> CostHoursExportResult:
+    service = CostHoursExportService()
+    return service.run(
+        workbook_path=forecast_path,
+        table_name=table_name,
+        output_file_name=output_file_name,
+        output_root=output_root,
     )

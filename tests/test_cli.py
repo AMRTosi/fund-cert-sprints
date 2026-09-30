@@ -74,3 +74,38 @@ def test_cli_legacy_generate_invocation_is_preserved(monkeypatch, tmp_path: Path
     assert captured["year"] == 2026
     assert captured["month"] == 6
     assert captured["dry_run"] is True
+
+
+def test_cli_export_cost_hours_json_invocation(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_export(**kwargs):
+        captured.update(kwargs)
+
+        class Result:
+            rows_exported = 2
+            table_name = kwargs["table_name"]
+            output_path = tmp_path / "out.json"
+
+        return Result()
+
+    monkeypatch.setattr(cli, "export_current_period_cost_hours", fake_export)
+    monkeypatch.setattr(cli, "default_cost_hours_output_dir", lambda: tmp_path)
+
+    exit_code = cli.main(
+        [
+            "export-cost-hours-json",
+            "--forecast",
+            "forecast.xlsx",
+            "--table-name",
+            "TableHorasCosteQuincenas202609",
+            "--output-file-name",
+            "2026-09",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["forecast_path"] == Path("forecast.xlsx")
+    assert captured["table_name"] == "TableHorasCosteQuincenas202609"
+    assert captured["output_file_name"] == "2026-09"
+    assert captured["output_root"] == tmp_path
