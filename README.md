@@ -107,7 +107,7 @@ Lee una tabla del workbook Forecast y genera un JSON con el estado actual del pe
 
 **Validaciones aplicadas:**
 - `table-name` debe seguir el patrón `TableHorasCosteQuincenasAAAAMM`.
-- La tabla debe incluir cabeceras `reviewee`, `horasQuincena1` y `horasQuincena2`.
+- La tabla debe incluir cabeceras `reviewee`, `email`, `subco`, `horasQuincena1` y `horasQuincena2`.
 
 **Salida:** `out/excel-current-period-cost-hours-excel/<OutputFileName>.json`
 
@@ -117,6 +117,8 @@ Lee una tabla del workbook Forecast y genera un JSON con el estado actual del pe
 [
   {
     "reviewee": "1001",
+    "email": "persona@empresa.com",
+    "subco": "SC01",
     "horasQuincena1": "80",
     "horasQuincena2": "72"
   }
@@ -188,4 +190,4 @@ El install editable (`-e .`) es necesario para que `python -m sprint_cert_automa
 | `Cannot run the macro` | Seguridad de macros | Habilitar macros y ubicación de confianza |
 | Warnings de openpyxl | Extensiones Excel no soportadas | Ignorar; validar salida en Excel |
 | `Table not found in workbook` | Nombre de tabla incorrecto o no existe | Revisar `--table-name` y el periodo AAAAMM |
-| `Required columns missing in table` | Faltan cabeceras requeridas | Verificar columnas `reviewee`, `horasQuincena1`, `horasQuincena2` |
+| `Required columns missing in table` | Faltan cabeceras requeridas | Verificar columnas `reviewee`, `email`, `subco`, `horasQuincena1`, `horasQuincena2` |

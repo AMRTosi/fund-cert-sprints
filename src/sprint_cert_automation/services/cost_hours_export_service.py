@@ -9,7 +9,7 @@ from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
 
 TABLE_NAME_PATTERN = re.compile(r"^TableHorasCosteQuincenas\d{6}$")
-REQUIRED_HEADERS = ("reviewee", "horasQuincena1", "horasQuincena2")
+REQUIRED_HEADERS = ("reviewee", "email", "subco", "horasQuincena1", "horasQuincena2")
 REQUIRED_HEADER_KEYS = {header.casefold(): header for header in REQUIRED_HEADERS}
 
 
@@ -93,6 +93,8 @@ class CostHoursExportService:
         for row_idx in range(min_row + 1, max_row + 1):
             item = {
                 "reviewee": self._to_string(worksheet.cell(row=row_idx, column=header_map["reviewee"]).value),
+                "email": self._to_string(worksheet.cell(row=row_idx, column=header_map["email"]).value),
+                "subco": self._to_string(worksheet.cell(row=row_idx, column=header_map["subco"]).value),
                 "horasQuincena1": self._to_string(
                     worksheet.cell(row=row_idx, column=header_map["horasquincena1"]).value
                 ),
