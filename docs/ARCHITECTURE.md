@@ -4,10 +4,11 @@ Documento de referencia técnica para futuras modificaciones del código.
 
 ## Visión general
 
-El sistema implementa dos casos de uso principales como comandos CLI:
+El sistema implementa tres casos de uso principales como comandos CLI:
 
 1. **generate** — Genera certificados de sprint (`.xlsm` + PDF) a partir del forecast.
 2. **duplicate-sheet** — Duplica y configura una pestaña de periodo mensual en el forecast.
+3. **export-cost-hours-json** — Extrae una tabla de horas de coste quincenales y la serializa a JSON.
 
 Ambos comparten la misma estructura de capas y convenciones de código.
 
@@ -29,13 +30,13 @@ Infrastructure (infrastructure/)
 ### CLI (`cli.py`)
 
 - Punto de entrada: `python -m sprint_cert_automation.cli`
-- Usa `argparse` con subcomandos: `generate` (implícito), `export-pdf`, `duplicate-sheet`
+- Usa `argparse` con subcomandos: `generate` (implícito), `export-pdf`, `duplicate-sheet`, `export-cost-hours-json`
 - Solo parsea argumentos y delega a `app.py`
 
 ### App (`app.py`)
 
 - Capa de orquestación fina (thin orchestration)
-- Cada función pública es un caso de uso: `generate_certificates()`, `export_certificates_to_pdf()`, `duplicate_period_sheet()`
+- Cada función pública es un caso de uso: `generate_certificates()`, `export_certificates_to_pdf()`, `duplicate_period_sheet()`, `export_current_period_cost_hours()`
 - Instancia servicios y devuelve dataclasses de resultado
 
 ### Services (`services/`)
@@ -48,6 +49,35 @@ Infrastructure (infrastructure/)
 | `sheet_duplicator.py` | Duplica pestaña Template_Mes y adapta contenido |
 | `sprint_configurator.py` | Calcula y escribe sprints (T_SPRINTS filas 1-4) |
 | `macro_export_service.py` | Ejecuta macro VBA y exporta a PDF vía COM |
+| `cost_hours_export_service.py` | Lee tabla `TableHorasCosteQuincenasAAAAMM` y exporta JSON |
+
+## Diseño de la exportación de coste a JSON
+
+### Flujo: `CostHoursExportService.run()`
+
+```python
+run(workbook_path, table_name, output_file_name, output_root)
+```
+
+Pasos:
+1. Valida el patrón del nombre de tabla (`TableHorasCosteQuincenasAAAAMM`).
+2. Abre workbook en modo lectura (`data_only=True`).
+3. Busca tabla por nombre de forma global en todas las hojas.
+4. Lee cabeceras y valida columnas obligatorias: `reviewee`, `horasQuincena1`, `horasQuincena2`.
+5. Convierte cada fila a objeto JSON (si la fila es completamente vacía, se ignora).
+6. Escribe salida en `out/excel-current-period-cost-hours-excel/<OutputFileName>.json`.
+
+### Contrato de salida JSON
+
+Cada elemento del array JSON tiene esta forma:
+
+```json
+{
+  "reviewee": "1001",
+  "horasQuincena1": "80",
+  "horasQuincena2": "72"
+}
+```
 
 ### Domain (`domain/`)
 

@@ -13,5 +13,6 @@ certificaciones/**
 *.xlsm
 *.xlsb
 *.xls
+out/**
 inputs/
 !inputs/.gitkeep
