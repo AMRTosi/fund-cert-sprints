@@ -9,6 +9,7 @@ from sprint_cert_automation.app import (
     export_certificates_to_pdf,
     export_current_period_cost_hours,
     generate_certificates,
+    validate_beeline_timesheets,
 )
 from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.utils.dates import today_year_month
@@ -22,6 +23,11 @@ def default_output_dir(year: int, month: int) -> Path:
 def default_cost_hours_output_dir() -> Path:
     project_root = Path(__file__).resolve().parents[2]
     return project_root / "out" / "excel-current-period-cost-hours-excel"
+
+
+def default_beeline_validation_output_dir() -> Path:
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / "out" / "beeline-timesheets-validation"
 
 
 def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
@@ -61,6 +67,12 @@ def _add_export_cost_hours_json_arguments(parser: argparse.ArgumentParser) -> No
     parser.add_argument("--output-file-name", required=True, type=str, help="Output JSON file name (without extension)")
 
 
+def _add_validate_beeline_timesheets_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--input-json", required=True, type=Path, help="Input JSON path with Beeline timesheets")
+    parser.add_argument("--control-workbook", required=True, type=Path, help="Control workbook path")
+    parser.add_argument("--output-file-name", required=True, type=str, help="Output JSON file name (without extension)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sprint certification automation commands",
@@ -91,13 +103,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_export_cost_hours_json_arguments(export_cost_hours_parser)
 
+    validate_beeline_parser = subparsers.add_parser(
+        "validate-beeline-timesheets",
+        help="Validate Beeline timesheets against control workbook and export decisions JSON",
+    )
+    _add_validate_beeline_timesheets_arguments(validate_beeline_parser)
+
     return parser
 
 
 def _normalize_args(raw_args: list[str]) -> list[str]:
     if not raw_args:
         return ["generate"]
-    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet", "export-cost-hours-json"}:
+    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet", "export-cost-hours-json", "validate-beeline-timesheets"}:
         return raw_args
     return ["generate", *raw_args]
 
@@ -184,6 +202,22 @@ def _run_export_cost_hours_json(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_validate_beeline_timesheets(args: argparse.Namespace) -> int:
+    result = validate_beeline_timesheets(
+        workbook_path=args.control_workbook,
+        input_json_path=args.input_json,
+        output_file_name=args.output_file_name,
+        output_root=default_beeline_validation_output_dir(),
+    )
+
+    print(f"Validated rows: {result.validated_rows}")
+    print(f"Approved: {result.approved_rows}")
+    print(f"Rejected: {result.rejected_rows}")
+    print(f"NotFound: {result.not_found_rows}")
+    print(f"Output JSON: {result.output_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_args = sys.argv[1:] if argv is None else argv
@@ -197,8 +231,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_duplicate_sheet(args)
     if args.command == "export-cost-hours-json":
         return _run_export_cost_hours_json(args)
+    if args.command == "validate-beeline-timesheets":
+        return _run_validate_beeline_timesheets(args)
 
-    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet, export-cost-hours-json")
+    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet, export-cost-hours-json, validate-beeline-timesheets")
     return 2
 
 

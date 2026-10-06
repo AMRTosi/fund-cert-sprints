@@ -109,3 +109,40 @@ def test_cli_export_cost_hours_json_invocation(monkeypatch, tmp_path: Path) -> N
     assert captured["table_name"] == "TableHorasCosteQuincenas202609"
     assert captured["output_file_name"] == "2026-09"
     assert captured["output_root"] == tmp_path
+
+
+def test_cli_validate_beeline_timesheets_invocation(monkeypatch, tmp_path: Path) -> None:
+    captured = {}
+
+    def fake_validate(**kwargs):
+        captured.update(kwargs)
+
+        class Result:
+            validated_rows = 3
+            approved_rows = 1
+            rejected_rows = 1
+            not_found_rows = 1
+            output_path = tmp_path / "validation.json"
+
+        return Result()
+
+    monkeypatch.setattr(cli, "validate_beeline_timesheets", fake_validate)
+    monkeypatch.setattr(cli, "default_beeline_validation_output_dir", lambda: tmp_path)
+
+    exit_code = cli.main(
+        [
+            "validate-beeline-timesheets",
+            "--input-json",
+            "input.json",
+            "--control-workbook",
+            "control.xlsx",
+            "--output-file-name",
+            "validation_2026_10",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["input_json_path"] == Path("input.json")
+    assert captured["workbook_path"] == Path("control.xlsx")
+    assert captured["output_file_name"] == "validation_2026_10"
+    assert captured["output_root"] == tmp_path

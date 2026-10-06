@@ -127,6 +127,61 @@ Lee una tabla del workbook Forecast y genera un JSON con el estado actual del pe
 
 ---
 
+### 4. Validación de timesheets Beeline
+
+Valida un JSON de reviewees y periodos contra el Excel de control para decidir la accion en Beeline (`Approve`, `Reject` o `NA`).
+
+Este caso de uso cruza la informacion del JSON con la hoja `Timecards Aprobadas`, detecta duplicados por estilo visual de celda y genera un JSON de salida con el resultado por elemento.
+
+**Uso:**
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli validate-beeline-timesheets `
+  --input-json "./inputs/beeline_timesheets_input_2026-10.json" `
+  --control-workbook "./inputs/Delivery_Management_GestionIniciativas.xlsx" `
+  --output-file-name "beeline_validation_2026-10"
+```
+
+**Salida:** `out/beeline-timesheets-validation/<OutputFileName>.json`
+
+**Fuente de verdad en Excel:**
+- Hoja: `Timecards Aprobadas`.
+- `beelineRevieweeName`: se busca en columna A.
+- `timePeriod`: se busca en fila 3.
+- La interseccion reviewee + periodo es la celda unica a validar.
+
+**Regla de duplicados por formato visual:**
+- Fuente negra (estado por defecto): pendiente de validar.
+- Fuente verde y negrita: ya validada previamente (duplicado).
+
+**Reglas funcionales principales:**
+- Si el reviewee no existe en columna A: `validationStatus=NotFound`, `beelineAction=NA`.
+- La busqueda de `timePeriod` admite equivalencia de formato de fecha (`10/5/2026` y `10/05/2026`) y soporta cabeceras con formula.
+- Si la celda de interseccion esta en verde + negrita: `validationStatus=Failed`, `beelineAction=Reject`, mensaje de duplicado.
+- Si la celda esta pendiente (negra), se compara `totalEstimatedAmount` como importe numerico contra el valor de Excel.
+- Si coincide: `validationStatus=OK`, `beelineAction=Approve` y se marca la celda en verde + negrita.
+- Si no coincide: `validationStatus=Failed`, `beelineAction=Reject`.
+- Si un elemento tiene campos obligatorios ausentes/vacios, se rechaza ese elemento y el proceso continua con el resto.
+
+**Formato de salida:**
+- Array plano JSON (mismo orden que entrada).
+- Estructura por elemento:
+
+```json
+{
+  "revieweeBeelineName": "de Manuel Ruiz, Alberto",
+  "timePeriod": "9/28/2026–10/4/2026",
+  "validationStatus": "OK",
+  "message": "",
+  "beelineAction": "Approve"
+}
+```
+
+Documentacion funcional detallada del requerimiento:
+- `docs/Validate_Beeline_Timesheets.md`
+
+---
+
 ## Estructura del proyecto
 
 ```
@@ -176,6 +231,7 @@ El install editable (`-e .`) es necesario para que `python -m sprint_cert_automa
 - Los ficheros Excel de entrada van en `inputs/` (ignorado por Git).
 - La generación de certificados **nunca modifica** el workbook de forecast.
 - El duplicado de periodos **sí modifica** el workbook de forecast (crea una nueva pestaña).
+- La validación de timesheets Beeline **sí modifica** el workbook de control (marca en verde + negrita las celdas aprobadas).
 - Salida de certificados siempre en `certificaciones/<YYYY-MM>`.
 - Usar `--dry-run` en cualquier comando para previsualizar sin efectos.
 
@@ -191,3 +247,6 @@ El install editable (`-e .`) es necesario para que `python -m sprint_cert_automa
 | Warnings de openpyxl | Extensiones Excel no soportadas | Ignorar; validar salida en Excel |
 | `Table not found in workbook` | Nombre de tabla incorrecto o no existe | Revisar `--table-name` y el periodo AAAAMM |
 | `Required columns missing in table` | Faltan cabeceras requeridas | Verificar columnas `reviewee`, `email`, `subco`, `horasQuincena1`, `horasQuincena2` |
+| `Reviewee not Found.` | `beelineRevieweeName` no existe en columna A de `Timecards Aprobadas` | Revisar nombre exacto en el JSON de entrada |
+| `Timecard enviada por duplicado.` | Celda de intersección ya está en fuente verde y negrita | Revisar si la timesheet ya fue validada en una ejecución previa |
+| `totalEstimatedAmount no disponible en Excel. Revisar cálculo en el fichero.` | La celda de intersección no tiene importe de control | Revisar mantenimiento del Excel de control |
