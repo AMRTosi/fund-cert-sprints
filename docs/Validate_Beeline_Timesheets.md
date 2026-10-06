@@ -55,27 +55,30 @@ Para cada objeto del JSON de entrada:
 	- `validationStatus`: `NotFound`
 	- `message`: `Reviewee not Found.`
 	- `beelineAction`: `NA`
-4. Si existe reviewee, buscar `timePeriod` en fila 3 con comparacion exacta.
-5. Resolver celda de interseccion (reviewee, periodo).
-6. Comprobar estilo de fuente en la celda:
+4. Si existe reviewee, buscar `timePeriod` en fila 3.
+5. La comparacion de periodos acepta equivalencia de formato de fecha (`10/5/2026` y `10/05/2026` se consideran el mismo dia).
+6. Si la cabecera del periodo en Excel es formula, se usa su valor calculado cuando este disponible; en caso contrario, se deriva el rango semanal desde la columna anterior para intentar resolver el match.
+7. Resolver celda de interseccion (reviewee, periodo).
+8. Comprobar estilo de fuente en la celda:
 	- Si esta en verde + negrita: duplicado.
 	- Resultado:
 	  - `validationStatus`: `Failed`
 	  - `message`: `Timecard enviada por duplicado.`
 	  - `beelineAction`: `Reject`
 	- No modificar valor ni estilo.
-7. Si esta en estado pendiente (fuente negra), leer el valor de la celda (importe veraz).
-8. Si el valor de Excel no esta disponible:
+9. Si esta en estado pendiente (fuente negra), leer el valor de la celda (importe veraz).
+10. Si el valor de Excel no esta disponible:
 	- `validationStatus`: `NotFound`
 	- `message`: `totalEstimatedAmount no disponible en Excel. Revisar cálculo en el fichero.`
 	- `beelineAction`: `NA`
-9. Si hay valor, comparar como texto literal con `totalEstimatedAmount` del JSON de entrada.
-10. Si coinciden:
+11. Si hay valor, comparar `totalEstimatedAmount` como importe numerico contra la celda de Excel.
+12. La comparacion debe tratar formatos numericos comunes (punto o coma decimal y separadores de miles) como equivalentes si representan el mismo valor.
+13. Si coinciden:
 	- `validationStatus`: `OK`
 	- `message`: `` (string vacio)
 	- `beelineAction`: `Approve`
 	- Marcar la celda como validada cambiando estilo de fuente a verde + negrita.
-11. Si no coinciden:
+14. Si no coinciden:
 	- `validationStatus`: `Failed`
 	- `message`: `Timecard incorrecta. Revisar y Rechzarla`
 	- `beelineAction`: `Reject`

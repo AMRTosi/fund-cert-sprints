@@ -11,6 +11,10 @@ from sprint_cert_automation.services.cost_hours_export_service import (
     CostHoursExportResult,
     CostHoursExportService,
 )
+from sprint_cert_automation.services.beeline_timesheet_validation_service import (
+    BeelineTimesheetValidationService,
+    BeelineValidationRunResult,
+)
 from sprint_cert_automation.services.macro_export_service import MacroExportResult, MacroExportService
 from sprint_cert_automation.services.sheet_duplicator import DuplicateSheetResult, duplicate_sheet
 
@@ -77,6 +81,21 @@ def export_current_period_cost_hours(
     return service.run(
         workbook_path=forecast_path,
         table_name=table_name,
+        output_file_name=output_file_name,
+        output_root=output_root,
+    )
+
+
+def validate_beeline_timesheets(
+    workbook_path: Path,
+    input_json_path: Path,
+    output_file_name: str,
+    output_root: Path,
+) -> BeelineValidationRunResult:
+    service = BeelineTimesheetValidationService()
+    return service.run(
+        workbook_path=workbook_path,
+        input_json_path=input_json_path,
         output_file_name=output_file_name,
         output_root=output_root,
     )

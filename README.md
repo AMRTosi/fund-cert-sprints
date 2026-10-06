@@ -133,6 +133,17 @@ Valida un JSON de reviewees y periodos contra el Excel de control para decidir l
 
 Este caso de uso cruza la informacion del JSON con la hoja `Timecards Aprobadas`, detecta duplicados por estilo visual de celda y genera un JSON de salida con el resultado por elemento.
 
+**Uso:**
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli validate-beeline-timesheets `
+  --input-json "./inputs/beeline_timesheets_input_2026-10.json" `
+  --control-workbook "./inputs/Delivery_Management_GestionIniciativas.xlsx" `
+  --output-file-name "beeline_validation_2026-10"
+```
+
+**Salida:** `out/beeline-timesheets-validation/<OutputFileName>.json`
+
 **Fuente de verdad en Excel:**
 - Hoja: `Timecards Aprobadas`.
 - `beelineRevieweeName`: se busca en columna A.
@@ -145,8 +156,9 @@ Este caso de uso cruza la informacion del JSON con la hoja `Timecards Aprobadas`
 
 **Reglas funcionales principales:**
 - Si el reviewee no existe en columna A: `validationStatus=NotFound`, `beelineAction=NA`.
+- La busqueda de `timePeriod` admite equivalencia de formato de fecha (`10/5/2026` y `10/05/2026`) y soporta cabeceras con formula.
 - Si la celda de interseccion esta en verde + negrita: `validationStatus=Failed`, `beelineAction=Reject`, mensaje de duplicado.
-- Si la celda esta pendiente (negra), se compara `totalEstimatedAmount` como texto literal contra el valor de Excel.
+- Si la celda esta pendiente (negra), se compara `totalEstimatedAmount` como importe numerico contra el valor de Excel.
 - Si coincide: `validationStatus=OK`, `beelineAction=Approve` y se marca la celda en verde + negrita.
 - Si no coincide: `validationStatus=Failed`, `beelineAction=Reject`.
 - Si un elemento tiene campos obligatorios ausentes/vacios, se rechaza ese elemento y el proceso continua con el resto.
