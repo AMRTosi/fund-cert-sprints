@@ -34,7 +34,13 @@ def test_app_runs_service_and_preserves_inputs(input_paths, tmp_path) -> None:
     result = validate_myte_fortnight(excel, myte, 1, " report.JSON ", tmp_path / "out")
     assert result.output_path == tmp_path / "out" / "report.json"
     assert (result.validated_rows, result.passed_rows, result.failed_rows) == (1, 1, 0)
-    assert json.loads(result.output_path.read_text(encoding="utf-8"))[0]["validationStatus"] == "Passed"
+    assert json.loads(result.output_path.read_text(encoding="utf-8")) == [{
+        "reviewee": "alice", "email": "alice@example.com", "validationStatus": "Passed",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "Processed", "chargeCode": "COMK3001", "totalHours": "67.2",
+        "workingHours": "80", "percentageTotalHoursVsWorkingHours": "84%",
+        "comments": "", "sendNotification": False, "notificationMessage": "",
+    }]
     assert result.output_path.read_bytes().endswith(b"\n")
     assert before == [p.read_bytes() for p in input_paths]
     assert list(result.output_path.parent.iterdir()) == [result.output_path]
@@ -169,4 +175,10 @@ def test_export_cost_hours_to_myte_end_to_end(tmp_path, period, working) -> None
     result = validate_myte_fortnight(exported.output_path, myte, period, "result", tmp_path / "validation")
     assert (result.validated_rows, result.passed_rows, result.failed_rows) == (1, 1, 0)
     assert workbook_path.read_bytes() == before
-    assert json.loads(result.output_path.read_text())[0]["reviewee"] == "alice"
+    assert json.loads(result.output_path.read_text()) == [{
+        "reviewee": "alice", "email": "alice@example.com", "validationStatus": "Passed",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "Processed", "chargeCode": "COMK3002", "totalHours": "unused",
+        "workingHours": working, "percentageTotalHoursVsWorkingHours": "92%",
+        "comments": "", "sendNotification": False, "notificationMessage": "",
+    }]

@@ -195,7 +195,14 @@ def test_cli_myte_business_failure_is_successful_execution(monkeypatch, tmp_path
         "--period-number", "1", "--output-file-name", "result",
     ]) == 0
     assert "Failed: 1" in capsys.readouterr().out
-    assert json.loads((tmp_path / "out" / "result.json").read_text())[0]["validationStatus"] == "Failed"
+    assert json.loads((tmp_path / "out" / "result.json").read_text()) == [{
+        "reviewee": "alice", "email": "alice@example.com", "validationStatus": "Failed",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "", "chargeCode": "", "totalHours": "", "workingHours": "",
+        "percentageTotalHoursVsWorkingHours": "",
+        "comments": "El reviewee registrado en el fichero excel no ha sido encontrado en myTE",
+        "sendNotification": False, "notificationMessage": "",
+    }]
 
 
 def test_myte_default_output_is_project_relative() -> None:

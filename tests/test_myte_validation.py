@@ -32,6 +32,10 @@ def test_exact_passed_contract_and_identity(excel, myte) -> None:
     assert validate_payloads([excel], [myte], 1) == [{
         "reviewee": " Alice ", "email": " Original@example.com ",
         "validationStatus": "Passed", "sendNotification": False,
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "Processed", "chargeCode": "X(COMK3001)",
+        "totalHours": "66.4", "workingHours": "80",
+        "percentageTotalHoursVsWorkingHours": "83%",
         "comments": "", "notificationMessage": "",
     }]
 
@@ -48,10 +52,57 @@ def test_missing_myte_and_extra_myte_keep_excel_order(excel, myte) -> None:
     assert [r["reviewee"] for r in results] == ["missing", "alice"]
     assert results[0] == {
         "reviewee": "missing", "email": "alice@example.com", "validationStatus": "Failed",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "", "chargeCode": "", "totalHours": "", "workingHours": "",
+        "percentageTotalHoursVsWorkingHours": "",
         "sendNotification": False,
         "comments": "El reviewee registrado en el fichero excel no ha sido encontrado en myTE",
         "notificationMessage": "",
     }
+
+
+@pytest.mark.parametrize("period", [1, 2])
+@pytest.mark.parametrize("status,working,percentage,passed,notify,comment", [
+    (" Processed ", " 80,04 ", " 84,00% ", True, False, ""),
+    (" New ", "invalid", "invalid", False, True, "myTE no enviado. TR Status es New o Draft."),
+    (" Draft ", "invalid", "invalid", False, True, "myTE no enviado. TR Status es New o Draft."),
+    (" Pending ", "invalid", "invalid", False, False, "Estado diferente de Processed. Revisar"),
+    (
+        " Processed ", " 79,00 ", "invalid", False, False,
+        "El numero de WorkingHours registradas en myTE es diferente al previsto en Excel.",
+    ),
+    (
+        " Processed ", " 80,04 ", " 87,00% ", False, False,
+        "El porcentaje < 87,00% > no cumple la politica definida para el chargeCode.",
+    ),
+])
+def test_all_branches_preserve_exact_source_strings(
+    excel, myte, period, status, working, percentage, passed, notify, comment,
+) -> None:
+    excel.update(reviewee=" Alice ", email=" Original@example.com ", extra="not exported")
+    excel["horasQuincena1"] = "unparsed" if period == 2 else " 80,00 "
+    excel["horasQuincena2"] = "unparsed" if period == 1 else " 80,00 "
+    myte.update(
+        reviewee=" ALICE ", trStatus=status, chargeCode=" FUNDAE (COMK3001) ",
+        totalHours=" not numeric ", workingHours=working,
+        percentageTotalHoursVsWorkingHours=percentage, extra="not exported",
+    )
+    other_myte = dict(myte, reviewee="bob", chargeCode="COMK3002", totalHours="different")
+    assert validate_payloads([excel], [other_myte, myte], period) == [{
+        "reviewee": " Alice ",
+        "email": " Original@example.com ",
+        "validationStatus": "Passed" if passed else "Failed",
+        "horasQuincena1": excel["horasQuincena1"],
+        "horasQuincena2": excel["horasQuincena2"],
+        "trStatus": status,
+        "chargeCode": " FUNDAE (COMK3001) ",
+        "totalHours": " not numeric ",
+        "workingHours": working,
+        "percentageTotalHoursVsWorkingHours": percentage,
+        "comments": comment,
+        "sendNotification": notify,
+        "notificationMessage": "",
+    }]
 
 
 @pytest.mark.parametrize("status,notify,comment", [

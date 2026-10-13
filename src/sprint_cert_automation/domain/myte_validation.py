@@ -15,8 +15,15 @@ class MyteValidationResult(TypedDict):
     reviewee: str
     email: str
     validationStatus: Literal["Passed", "Failed"]
-    sendNotification: bool
+    horasQuincena1: str
+    horasQuincena2: str
+    trStatus: str
+    chargeCode: str
+    totalHours: str
+    workingHours: str
+    percentageTotalHoursVsWorkingHours: str
     comments: str
+    sendNotification: bool
     notificationMessage: str
 
 
@@ -79,14 +86,24 @@ def _parse_decimal(value: str, field_name: str, reviewee: str) -> float:
 
 
 def _result(
-    excel: dict[str, str], comments: str = "", send_notification: bool = False,
+    excel: dict[str, str], myte: dict[str, str] | None,
+    comments: str = "", send_notification: bool = False,
 ) -> MyteValidationResult:
     return {
         "reviewee": excel["reviewee"],
         "email": excel["email"],
         "validationStatus": "Failed" if comments else "Passed",
-        "sendNotification": send_notification,
+        "horasQuincena1": excel["horasQuincena1"],
+        "horasQuincena2": excel["horasQuincena2"],
+        "trStatus": myte["trStatus"] if myte is not None else "",
+        "chargeCode": myte["chargeCode"] if myte is not None else "",
+        "totalHours": myte["totalHours"] if myte is not None else "",
+        "workingHours": myte["workingHours"] if myte is not None else "",
+        "percentageTotalHoursVsWorkingHours": (
+            myte["percentageTotalHoursVsWorkingHours"] if myte is not None else ""
+        ),
         "comments": comments,
+        "sendNotification": send_notification,
         "notificationMessage": "",
     }
 
@@ -112,16 +129,16 @@ def validate_payloads(
         myte = myte_by_reviewee.get(key)
         if myte is None:
             results.append(_result(
-                excel, "El reviewee registrado en el fichero excel no ha sido encontrado en myTE",
+                excel, None, "El reviewee registrado en el fichero excel no ha sido encontrado en myTE",
             ))
             continue
 
         status = myte["trStatus"].strip()
         if status in {"New", "Draft"}:
-            results.append(_result(excel, "myTE no enviado. TR Status es New o Draft.", True))
+            results.append(_result(excel, myte, "myTE no enviado. TR Status es New o Draft.", True))
             continue
         if status != "Processed":
-            results.append(_result(excel, "Estado diferente de Processed. Revisar"))
+            results.append(_result(excel, myte, "Estado diferente de Processed. Revisar"))
             continue
 
         hours_field = "horasQuincena1" if period_number == 1 else "horasQuincena2"
@@ -131,7 +148,7 @@ def validate_payloads(
         )
         if excel_hours != working_hours:
             results.append(_result(
-                excel, "El numero de WorkingHours registradas en myTE es diferente al previsto en Excel.",
+                excel, myte, "El numero de WorkingHours registradas en myTE es diferente al previsto en Excel.",
             ))
             continue
 
@@ -152,5 +169,5 @@ def validate_payloads(
         comments = "" if passed else (
             f"El porcentaje <{percentage_raw}> no cumple la politica definida para el chargeCode."
         )
-        results.append(_result(excel, comments))
+        results.append(_result(excel, myte, comments))
     return results

@@ -63,7 +63,11 @@ Flujo: `cli.py` → `app.validate_myte_fortnight()` →
 - El dominio no tiene IO. Valida contratos y duplicados globalmente y aplica,
   en orden, exclusión por subco, correspondencia, estado, horas y porcentaje.
 - Los contratos tipados de salida usan `MyteValidationResult` (`TypedDict`);
-  se preservan exactamente las claves, mensajes y reglas del servicio importado.
+  el constructor común produce 13 propiedades obligatorias en todas las ramas.
+  Copia ambas horas quincenales de Excel y los cinco campos de datos myTE como
+  strings originales, sin normalizarlos ni recalcularlos para la salida.
+  Sin correspondencia myTE, esos cinco campos son `""`. No se exporta `subco`.
+  Se preservan los mensajes, reglas y cortocircuitos del servicio importado.
 - El servicio valida la quincena 1/2 también para llamadas sin CLI y devuelve
   `MyteValidationRunResult`: rutas, total evaluado, Passed y Failed.
 - La CLI fija la salida en `out/myte-fortnight-validation`, relativa al proyecto.

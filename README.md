@@ -211,6 +211,14 @@ La quincena (`--period-number`) es obligatoria y admite únicamente 1 o 2.
 - COMK3002 exige 91–93 %; COMK3001 exige 82–86 %, salvo `patricia.c.martin` y `e.a.magana.ramirez`, que requieren exactamente 80 %.
 - Conserva el orden de Excel y los mensajes originales; `notificationMessage` siempre está vacío.
 
+**Contrato de salida:** cada resultado contiene 13 propiedades. Además de los
+seis campos de validación e identidad existentes, incluye `horasQuincena1` y
+`horasQuincena2` de Excel, y `trStatus`, `chargeCode`, `totalHours`, `workingHours`
+y `percentageTotalHoursVsWorkingHours` de myTE. Conserva los strings originales
+en resultados Passed y Failed; si no existe correspondencia myTE, sus cinco
+campos son `""`. Ambas quincenas se incluyen siempre y `subco` no se exporta.
+Los consumidores con un esquema cerrado de seis propiedades deben actualizarlo.
+
 No modifica las entradas ni envía notificaciones. La ejecución devuelve 0 cuando
 genera un informe, aunque incluya resultados `Failed`; errores de ejecución devuelven
 1 y argumentos inválidos, 2. No admite `--dry-run`.

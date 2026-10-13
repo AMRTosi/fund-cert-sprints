@@ -79,7 +79,8 @@ El porcentaje se toma de `percentageTotalHoursVsWorkingHours`, no se recalcula.
 
 ## Contrato de salida
 
-Array plano, en el orden de Excel, excluyendo los trabajadores con subco=1:
+Array plano, en el orden de Excel, excluyendo los trabajadores con subco=1.
+Cada resultado tiene exactamente 13 propiedades obligatorias:
 
 ```json
 [
@@ -87,18 +88,39 @@ Array plano, en el orden de Excel, excluyendo los trabajadores con subco=1:
     "reviewee": "alice",
     "email": "alice@example.com",
     "validationStatus": "Passed",
-    "sendNotification": false,
+    "horasQuincena1": "80",
+    "horasQuincena2": "72",
+    "trStatus": "Processed",
+    "chargeCode": "FUNDAE (COMK3001)",
+    "totalHours": "67.2",
+    "workingHours": "80",
+    "percentageTotalHoursVsWorkingHours": "84%",
     "comments": "",
+    "sendNotification": false,
     "notificationMessage": ""
   }
 ]
 ```
 
-- Se conservan exactamente `reviewee` y `email` de Excel, incluso sus espacios.
+- Se conservan exactamente `reviewee`, `email`, `horasQuincena1` y
+  `horasQuincena2` de Excel. Ambas quincenas se incluyen, independientemente de
+  `--period-number`.
+- `trStatus`, `chargeCode`, `totalHours`, `workingHours` y
+  `percentageTotalHoursVsWorkingHours` se copian del registro myTE correspondiente.
+  Si no existe correspondencia, los cinco campos son strings vacios (`""`).
+- Los datos de ambas fuentes mantienen sus strings originales, incluidos espacios,
+  comas, decimales y `%`, sin normalizacion, redondeo ni recalculo para la salida.
+  Se incluyen tambien en resultados Failed y validaciones cortocircuitadas,
+  sin introducir parseos numericos adicionales.
+- `subco` y los campos adicionales de las entradas no se incluyen en la salida.
 - `validationStatus`: Passed o Failed; no se adapta a los estados de Beeline.
 - `sendNotification`: booleano, true solo para New/Draft.
 - `notificationMessage`: siempre string vacio.
 - Arrays vacios o todos los trabajadores excluidos producen `[]`.
+
+La ampliacion es aditiva y no cambia las reglas ni los contratos de entrada.
+Los consumidores que exijan exactamente las seis propiedades anteriores deben
+actualizar su esquema para aceptar las 13 propiedades.
 
 ## Reglas y prioridad
 
@@ -125,6 +147,7 @@ Los registros myTE que no existen en Excel no producen salida.
 Para un trabajador de Excel sin myTE:
 
 - Failed, sendNotification=false.
+- Se conservan las dos horas quincenales de Excel; los cinco campos myTE son `""`.
 - comments: `El reviewee registrado en el fichero excel no ha sido encontrado en myTE`
 
 ### Regla 3: estado
@@ -205,7 +228,9 @@ No se permite que la ruta de salida coincida con ninguna entrada.
 
 ## Validacion automatizada
 
-Las pruebas incluyen contratos exactos, exclusiones, orden, normalizacion,
+Las pruebas incluyen contratos exactos de 13 propiedades en todas las ramas,
+copia literal de datos de ambas fuentes, campos myTE vacios sin correspondencia,
+exclusiones, orden, normalizacion,
 duplicados en ambos origenes, cortocircuitos, ambas quincenas, redondeo,
 porcentajes limite, excepciones personales, codigos desconocidos, errores de IO,
 publicacion atomica, opciones de codificacion y CLI.
