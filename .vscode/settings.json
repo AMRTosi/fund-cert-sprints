@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^Push-Location importar-funcionalidad\\\\fundae-gi-myte-validator; try \\{ & \\.\\.\\\\\\.\\.\\\\\\.venv\\\\Scripts\\\\python\\.exe -m unittest discover -s tests -v \\} finally \\{ Pop-Location \\}; & \\.\\\\\\.venv\\\\Scripts\\\\python\\.exe -m pytest tests\\\\test_cli\\.py tests\\\\test_cost_hours_export_service\\.py tests\\\\test_beeline_timesheet_validation_service\\.py -q$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

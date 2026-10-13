@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 import sys
 
@@ -10,6 +11,7 @@ from sprint_cert_automation.app import (
     export_current_period_cost_hours,
     generate_certificates,
     validate_beeline_timesheets,
+    validate_myte_fortnight,
 )
 from sprint_cert_automation.infrastructure.excel_com import DEFAULT_EXPORT_MACRO_NAME
 from sprint_cert_automation.utils.dates import today_year_month
@@ -28,6 +30,11 @@ def default_cost_hours_output_dir() -> Path:
 def default_beeline_validation_output_dir() -> Path:
     project_root = Path(__file__).resolve().parents[2]
     return project_root / "out" / "beeline-timesheets-validation"
+
+
+def default_myte_validation_output_dir() -> Path:
+    project_root = Path(__file__).resolve().parents[2]
+    return project_root / "out" / "myte-fortnight-validation"
 
 
 def _add_generate_arguments(parser: argparse.ArgumentParser) -> None:
@@ -73,6 +80,16 @@ def _add_validate_beeline_timesheets_arguments(parser: argparse.ArgumentParser) 
     parser.add_argument("--output-file-name", required=True, type=str, help="Output JSON file name (without extension)")
 
 
+def _add_validate_myte_fortnight_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--excel-json", required=True, type=Path, help="Excel cost hours JSON path")
+    parser.add_argument("--myte-json", required=True, type=Path, help="Extracted myTE JSON path")
+    parser.add_argument("--period-number", required=True, type=int, choices=(1, 2), help="Fortnight 1 or 2")
+    parser.add_argument("--output-file-name", required=True, help="Output JSON name (without extension)")
+    parser.add_argument("--encoding", default="utf-8", help="Input/output encoding (default: utf-8)")
+    parser.add_argument("--indent", type=int, default=2, help="Output JSON indentation (default: 2)")
+    parser.add_argument("--pretty-log", action="store_true", help="Print JSON summary")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sprint certification automation commands",
@@ -109,13 +126,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_validate_beeline_timesheets_arguments(validate_beeline_parser)
 
+    myte_parser = subparsers.add_parser(
+        "validate-myte-fortnight",
+        help="Validate myTE fortnight against Excel cost hours JSON",
+    )
+    _add_validate_myte_fortnight_arguments(myte_parser)
+
     return parser
 
 
 def _normalize_args(raw_args: list[str]) -> list[str]:
     if not raw_args:
         return ["generate"]
-    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet", "export-cost-hours-json", "validate-beeline-timesheets"}:
+    if raw_args[0] in {"generate", "export-pdf", "duplicate-sheet", "export-cost-hours-json", "validate-beeline-timesheets", "validate-myte-fortnight"}:
         return raw_args
     return ["generate", *raw_args]
 
@@ -218,6 +241,34 @@ def _run_validate_beeline_timesheets(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_validate_myte_fortnight(args: argparse.Namespace) -> int:
+    try:
+        result = validate_myte_fortnight(
+            excel_json_path=args.excel_json,
+            myte_json_path=args.myte_json,
+            period_number=args.period_number,
+            output_file_name=args.output_file_name,
+            output_root=default_myte_validation_output_dir(),
+            encoding=args.encoding,
+            indent=args.indent,
+        )
+    except (OSError, ValueError, LookupError) as exc:
+        print(f"Error durante la validacion myTE: {exc}", file=sys.stderr)
+        return 1
+    if args.pretty_log:
+        print(json.dumps({
+            "total": result.validated_rows,
+            "passed": result.passed_rows,
+            "failed": result.failed_rows,
+        }, indent=2))
+    else:
+        print(f"Validated rows: {result.validated_rows}")
+        print(f"Passed: {result.passed_rows}")
+        print(f"Failed: {result.failed_rows}")
+        print(f"Output JSON: {result.output_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     raw_args = sys.argv[1:] if argv is None else argv
@@ -233,8 +284,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_export_cost_hours_json(args)
     if args.command == "validate-beeline-timesheets":
         return _run_validate_beeline_timesheets(args)
+    if args.command == "validate-myte-fortnight":
+        return _run_validate_myte_fortnight(args)
 
-    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet, export-cost-hours-json, validate-beeline-timesheets")
+    parser.error("Command must be one of: generate, export-pdf, duplicate-sheet, export-cost-hours-json, validate-beeline-timesheets, validate-myte-fortnight")
     return 2
 
 

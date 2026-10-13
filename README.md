@@ -182,6 +182,47 @@ Documentacion funcional detallada del requerimiento:
 
 ---
 
+### 5. Validación de quincena myTE
+
+Valida los datos extraídos de myTE contra las horas previstas del JSON de Excel,
+manteniendo las reglas del servicio original. El JSON generado por el caso de uso 3
+se puede usar directamente como entrada, siempre que `reviewee` identifique a la
+misma persona en ambas fuentes.
+
+**Uso:**
+
+```powershell
+.\.venv\Scripts\python.exe -m sprint_cert_automation.cli validate-myte-fortnight `
+  --excel-json ".\out\excel-current-period-cost-hours-excel\excel-cost-hours_2026-09.json" `
+  --myte-json ".\inputs\myte_2026-09_q1.json" `
+  --period-number 1 `
+  --output-file-name "myte_validation_2026-09_q1"
+```
+
+**Salida fija:** `out/myte-fortnight-validation/<OutputFileName>.json`.
+La quincena (`--period-number`) es obligatoria y admite únicamente 1 o 2.
+
+**Reglas principales:**
+- Cruza `reviewee` con trim + minúsculas; contratos inválidos y duplicados abortan el proceso.
+- Excluye `subco="1"`; otros strings continúan el flujo normal.
+- Un trabajador de Excel sin myTE produce `Failed`; los registros exclusivos de myTE no generan salida.
+- `New`/`Draft` producen `Failed` con `sendNotification=true`; otros estados distintos de `Processed` fallan sin notificación.
+- Compara `workingHours` con la quincena seleccionada, redondeando ambos valores a un decimal.
+- COMK3002 exige 91–93 %; COMK3001 exige 82–86 %, salvo `patricia.c.martin` y `e.a.magana.ramirez`, que requieren exactamente 80 %.
+- Conserva el orden de Excel y los mensajes originales; `notificationMessage` siempre está vacío.
+
+No modifica las entradas ni envía notificaciones. La ejecución devuelve 0 cuando
+genera un informe, aunque incluya resultados `Failed`; errores de ejecución devuelven
+1 y argumentos inválidos, 2. No admite `--dry-run`.
+
+Opciones adicionales del servicio original: `--encoding` (UTF-8 por defecto),
+`--indent` (2 por defecto) y `--pretty-log` (resumen JSON en stdout).
+
+Contratos, mensajes, prioridades y casos límite:
+[Validación de quincena myTE](docs/Validate_MyTE_Fortnight.md).
+
+---
+
 ## Estructura del proyecto
 
 ```
@@ -195,10 +236,12 @@ cert_automation/
 │   ├── app.py              # Orquestación de casos de uso
 │   ├── domain/             # Modelos y reglas de negocio
 │   │   ├── models.py       # Dataclasses (Sprint, Technician, etc.)
-│   │   └── rules.py        # Reglas de facturación
+│   │   ├── rules.py        # Reglas de facturación
+│   │   └── myte_validation.py # Contratos y reglas puras myTE
 │   ├── services/           # Lógica de aplicación
 │   │   ├── certificate_service.py   # Generación de certificados
 │   │   ├── cost_hours_export_service.py # Exportación de horas quincenales a JSON
+│   │   ├── myte_fortnight_validation_service.py # Validación de quincena myTE
 │   │   ├── forecast_reader.py       # Lectura del forecast
 │   │   ├── sheet_duplicator.py      # Duplicado de periodos
 │   │   ├── sprint_configurator.py   # Cálculo y escritura de sprints
@@ -232,8 +275,9 @@ El install editable (`-e .`) es necesario para que `python -m sprint_cert_automa
 - La generación de certificados **nunca modifica** el workbook de forecast.
 - El duplicado de periodos **sí modifica** el workbook de forecast (crea una nueva pestaña).
 - La validación de timesheets Beeline **sí modifica** el workbook de control (marca en verde + negrita las celdas aprobadas).
+- La validación de quincena myTE **nunca modifica** los JSON de entrada ni el workbook de forecast.
 - Salida de certificados siempre en `certificaciones/<YYYY-MM>`.
-- Usar `--dry-run` en cualquier comando para previsualizar sin efectos.
+- Usar `--dry-run` en generación de certificados, exportación PDF o duplicado de periodo para previsualizar sin efectos.
 
 ## Troubleshooting
 

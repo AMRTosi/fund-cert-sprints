@@ -16,6 +16,10 @@ from sprint_cert_automation.services.beeline_timesheet_validation_service import
     BeelineValidationRunResult,
 )
 from sprint_cert_automation.services.macro_export_service import MacroExportResult, MacroExportService
+from sprint_cert_automation.services.myte_fortnight_validation_service import (
+    MyteFortnightValidationService,
+    MyteValidationRunResult,
+)
 from sprint_cert_automation.services.sheet_duplicator import DuplicateSheetResult, duplicate_sheet
 
 
@@ -98,4 +102,24 @@ def validate_beeline_timesheets(
         input_json_path=input_json_path,
         output_file_name=output_file_name,
         output_root=output_root,
+    )
+
+
+def validate_myte_fortnight(
+    excel_json_path: Path,
+    myte_json_path: Path,
+    period_number: int,
+    output_file_name: str,
+    output_root: Path,
+    encoding: str = "utf-8",
+    indent: int = 2,
+) -> MyteValidationRunResult:
+    return MyteFortnightValidationService().run(
+        excel_json_path=excel_json_path,
+        myte_json_path=myte_json_path,
+        period_number=period_number,
+        output_file_name=output_file_name,
+        output_root=output_root,
+        encoding=encoding,
+        indent=indent,
     )
