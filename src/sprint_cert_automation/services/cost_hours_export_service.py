@@ -7,6 +7,7 @@ import re
 
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
+from sprint_cert_automation.utils.filenames import normalize_json_output_name
 
 TABLE_NAME_PATTERN = re.compile(r"^TableHorasCosteQuincenas\d{6}$")
 REQUIRED_HEADERS = ("reviewee", "email", "subco", "horasQuincena1", "horasQuincena2")
@@ -60,14 +61,7 @@ class CostHoursExportService:
             )
 
     def _normalize_output_name(self, output_file_name: str) -> str:
-        name = output_file_name.strip()
-        if name.lower().endswith(".json"):
-            name = name[:-5]
-        if not name:
-            raise ValueError("output-file-name must not be empty")
-        if any(char in name for char in "\\/:*?\"<>|"):
-            raise ValueError("output-file-name contains invalid filesystem characters")
-        return name
+        return normalize_json_output_name(output_file_name)
 
     def _resolve_table(self, workbook, table_name: str):
         for worksheet in workbook.worksheets:

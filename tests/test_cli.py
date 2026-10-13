@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+
+import pytest
 
 from sprint_cert_automation import cli
 
@@ -109,6 +112,102 @@ def test_cli_export_cost_hours_json_invocation(monkeypatch, tmp_path: Path) -> N
     assert captured["table_name"] == "TableHorasCosteQuincenas202609"
     assert captured["output_file_name"] == "2026-09"
     assert captured["output_root"] == tmp_path
+
+
+def test_cli_myte_invocation_and_summary(monkeypatch, tmp_path, capsys) -> None:
+    from sprint_cert_automation.services.myte_fortnight_validation_service import MyteValidationRunResult
+
+    captured = {}
+
+    def fake_validate(**kwargs):
+        captured.update(kwargs)
+        return MyteValidationRunResult(
+            kwargs["excel_json_path"], kwargs["myte_json_path"], tmp_path / "result.json", 2, 1, 1,
+        )
+
+    monkeypatch.setattr(cli, "validate_myte_fortnight", fake_validate)
+    monkeypatch.setattr(cli, "default_myte_validation_output_dir", lambda: tmp_path)
+    assert cli.main([
+        "validate-myte-fortnight", "--excel-json", "excel.json", "--myte-json", "myte.json",
+        "--period-number", "2", "--output-file-name", "result", "--pretty-log",
+        "--encoding", "utf-16", "--indent", "4",
+    ]) == 0
+    assert captured == {
+        "excel_json_path": Path("excel.json"), "myte_json_path": Path("myte.json"),
+        "period_number": 2, "output_file_name": "result", "output_root": tmp_path,
+        "encoding": "utf-16", "indent": 4,
+    }
+    assert json.loads(capsys.readouterr().out) == {"total": 2, "passed": 1, "failed": 1}
+
+
+@pytest.mark.parametrize("period", ["0", "3", "invalid"])
+def test_cli_myte_invalid_period(period) -> None:
+    with pytest.raises(SystemExit) as exc:
+        cli.main([
+            "validate-myte-fortnight", "--excel-json", "excel.json", "--myte-json", "myte.json",
+            "--period-number", period, "--output-file-name", "result",
+        ])
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("missing", ["--excel-json", "--myte-json", "--period-number", "--output-file-name"])
+def test_cli_myte_required_arguments(missing) -> None:
+    args = [
+        "validate-myte-fortnight", "--excel-json", "excel.json", "--myte-json", "myte.json",
+        "--period-number", "1", "--output-file-name", "result",
+    ]
+    index = args.index(missing)
+    del args[index:index + 2]
+    with pytest.raises(SystemExit) as exc:
+        cli.main(args)
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("error", [
+    FileNotFoundError("missing file"), ValueError("invalid contract"),
+    PermissionError("locked output"), LookupError("unknown encoding"),
+    UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid encoding"),
+])
+def test_cli_myte_reports_known_errors(monkeypatch, capsys, error) -> None:
+    def failed_validate(**kwargs):
+        raise error
+
+    monkeypatch.setattr(cli, "validate_myte_fortnight", failed_validate)
+    assert cli.main([
+        "validate-myte-fortnight", "--excel-json", "excel.json", "--myte-json", "myte.json",
+        "--period-number", "1", "--output-file-name", "result",
+    ]) == 1
+    captured = capsys.readouterr()
+    assert "Error durante la validacion myTE:" in captured.err
+    assert captured.out == ""
+
+
+def test_cli_myte_business_failure_is_successful_execution(monkeypatch, tmp_path, capsys) -> None:
+    excel, myte = tmp_path / "excel.json", tmp_path / "myte.json"
+    excel.write_text(json.dumps([{
+        "reviewee": "alice", "email": "alice@example.com", "subco": "0",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+    }]))
+    myte.write_text("[]")
+    monkeypatch.setattr(cli, "default_myte_validation_output_dir", lambda: tmp_path / "out")
+    assert cli.main([
+        "validate-myte-fortnight", "--excel-json", str(excel), "--myte-json", str(myte),
+        "--period-number", "1", "--output-file-name", "result",
+    ]) == 0
+    assert "Failed: 1" in capsys.readouterr().out
+    assert json.loads((tmp_path / "out" / "result.json").read_text()) == [{
+        "reviewee": "alice", "email": "alice@example.com", "validationStatus": "Failed",
+        "horasQuincena1": "80", "horasQuincena2": "72",
+        "trStatus": "", "chargeCode": "", "totalHours": "", "workingHours": "",
+        "percentageTotalHoursVsWorkingHours": "",
+        "comments": "El reviewee registrado en el fichero excel no ha sido encontrado en myTE",
+        "sendNotification": False, "notificationMessage": "",
+    }]
+
+
+def test_myte_default_output_is_project_relative() -> None:
+    project = Path(cli.__file__).resolve().parents[2]
+    assert cli.default_myte_validation_output_dir() == project / "out" / "myte-fortnight-validation"
 
 
 def test_cli_validate_beeline_timesheets_invocation(monkeypatch, tmp_path: Path) -> None:

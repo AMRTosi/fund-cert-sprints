@@ -10,6 +10,7 @@ import re
 
 from openpyxl import load_workbook
 from openpyxl.styles import Color
+from sprint_cert_automation.utils.filenames import normalize_json_output_name
 
 SHEET_NAME = "Timecards Aprobadas"
 HEADER_ROW_TIME_PERIOD = 3
@@ -209,14 +210,7 @@ class BeelineTimesheetValidationService:
         )
 
     def _normalize_output_name(self, output_file_name: str) -> str:
-        name = output_file_name.strip()
-        if name.lower().endswith(".json"):
-            name = name[:-5]
-        if not name:
-            raise ValueError("output-file-name must not be empty")
-        if any(char in name for char in "\\/:*?\"<>|"):
-            raise ValueError("output-file-name contains invalid filesystem characters")
-        return name
+        return normalize_json_output_name(output_file_name)
 
     def _has_all_required_fields(self, item: dict[str, object]) -> bool:
         for key in REQUIRED_INPUT_FIELDS:

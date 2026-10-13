@@ -4,13 +4,15 @@ Documento de referencia técnica para futuras modificaciones del código.
 
 ## Visión general
 
-El sistema implementa tres casos de uso principales como comandos CLI:
+El sistema implementa cinco casos de uso principales como comandos CLI:
 
 1. **generate** — Genera certificados de sprint (`.xlsm` + PDF) a partir del forecast.
 2. **duplicate-sheet** — Duplica y configura una pestaña de periodo mensual en el forecast.
 3. **export-cost-hours-json** — Extrae una tabla de horas de coste quincenales y la serializa a JSON.
+4. **validate-beeline-timesheets** — Valida timesheets contra el workbook de control y marca aprobaciones.
+5. **validate-myte-fortnight** — Valida una quincena myTE contra el JSON de horas previstas de Excel.
 
-Ambos comparten la misma estructura de capas y convenciones de código.
+Todos comparten la misma estructura de capas y convenciones de código.
 
 ## Capas de la arquitectura
 
@@ -30,13 +32,13 @@ Infrastructure (infrastructure/)
 ### CLI (`cli.py`)
 
 - Punto de entrada: `python -m sprint_cert_automation.cli`
-- Usa `argparse` con subcomandos: `generate` (implícito), `export-pdf`, `duplicate-sheet`, `export-cost-hours-json`
+- Usa `argparse` con subcomandos: `generate` (implícito), `export-pdf`, `duplicate-sheet`, `export-cost-hours-json`, `validate-beeline-timesheets`, `validate-myte-fortnight`
 - Solo parsea argumentos y delega a `app.py`
 
 ### App (`app.py`)
 
 - Capa de orquestación fina (thin orchestration)
-- Cada función pública es un caso de uso: `generate_certificates()`, `export_certificates_to_pdf()`, `duplicate_period_sheet()`, `export_current_period_cost_hours()`
+- Funciones públicas: `generate_certificates()`, `export_certificates_to_pdf()`, `duplicate_period_sheet()`, `export_current_period_cost_hours()`, `validate_beeline_timesheets()`, `validate_myte_fortnight()`
 - Instancia servicios y devuelve dataclasses de resultado
 
 ### Services (`services/`)
@@ -50,6 +52,40 @@ Infrastructure (infrastructure/)
 | `sprint_configurator.py` | Calcula y escribe sprints (T_SPRINTS filas 1-4) |
 | `macro_export_service.py` | Ejecuta macro VBA y exporta a PDF vía COM |
 | `cost_hours_export_service.py` | Lee tabla `TableHorasCosteQuincenasAAAAMM` y exporta JSON |
+| `beeline_timesheet_validation_service.py` | Valida timesheets y marca las celdas aprobadas en Excel |
+| `myte_fortnight_validation_service.py` | Lee dos JSON, ejecuta reglas myTE y publica el informe |
+
+## Diseño de la validación de quincena myTE
+
+Flujo: `cli.py` → `app.validate_myte_fortnight()` →
+`MyteFortnightValidationService.run()` → `domain.myte_validation.validate_payloads()`.
+
+- El dominio no tiene IO. Valida contratos y duplicados globalmente y aplica,
+  en orden, exclusión por subco, correspondencia, estado, horas y porcentaje.
+- Los contratos tipados de salida usan `MyteValidationResult` (`TypedDict`);
+  el constructor común produce 13 propiedades obligatorias en todas las ramas.
+  Copia ambas horas quincenales de Excel y los cinco campos de datos myTE como
+  strings originales, sin normalizarlos ni recalcularlos para la salida.
+  Sin correspondencia myTE, esos cinco campos son `""`. No se exporta `subco`.
+  Se preservan los mensajes, reglas y cortocircuitos del servicio importado.
+- El servicio valida la quincena 1/2 también para llamadas sin CLI y devuelve
+  `MyteValidationRunResult`: rutas, total evaluado, Passed y Failed.
+- La CLI fija la salida en `out/myte-fortnight-validation`, relativa al proyecto.
+  El servicio acepta `output_root` explícito, igual que los otros casos de uso.
+- `normalize_json_output_name()` en `utils/filenames.py` comparte la política de
+  nombres de salida de los casos 3, 4 y 5, sin cambiar la validación existente.
+- Se rechaza una salida que coincida con una entrada. Se evalúa todo el informe
+  antes de crear un archivo temporal en el directorio de salida y reemplazar el
+  destino; el temporal se elimina también si falla la escritura o publicación.
+- Las entradas no se modifican. No hay acceso directo a myTE, envío de mensajes,
+  dependencias nuevas ni dependencia de la carpeta `importar-funcionalidad`.
+- La CLI comunica errores conocidos de IO, contrato o codificación por stderr
+  y devuelve 1. Un informe con Failed sigue siendo ejecución correcta (0);
+  argparse rechaza argumentos inválidos (2). No se capturan errores inesperados.
+
+El JSON del caso 3 es compatible sin transformación; la identidad `reviewee`
+debe corresponder entre Excel y myTE. Reglas y contratos completos:
+[Validate_MyTE_Fortnight.md](Validate_MyTE_Fortnight.md).
 
 ## Diseño de la exportación de coste a JSON
 
@@ -85,6 +121,7 @@ Cada elemento del array JSON tiene esta forma:
 
 - `models.py` — Dataclasses puras: `Sprint`, `Technician`, `SprintWindow`, etc.
 - `rules.py` — Reglas de negocio sin dependencias externas (facturación, filtrado)
+- `myte_validation.py` — Contratos y reglas puras de validación de quincenas myTE
 
 ### Infrastructure (`infrastructure/`)
 
