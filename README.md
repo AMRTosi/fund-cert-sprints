@@ -133,11 +133,18 @@ Valida un JSON de reviewees y periodos contra el Excel de control para decidir l
 
 Este caso de uso cruza la informacion del JSON con la hoja `Timecards Aprobadas`, detecta duplicados por estilo visual de celda y genera un JSON de salida con el resultado por elemento.
 
+**Pasos previos:**
+- [x] Extraer información de Beeline: abrir un cmd > copilot en la ruta donde está descargado el repo `fundae-gi-beeline-reader`.
+- [x] Revisar que las vacaciones solicitadas en excel de Fundae cuadra con las del fichero `Delivery_Management_GestionIniciativas_vXXXX.xlsx`.
+- [x] Preparar las cantidades semanales estimadas por trabajador en la pestaña `Timecards Aprobadas`: Ejeutar el prompt correspondiente en la pestaña `Prompts` del fichero excel de control `Delivery_Management_GestionIniciativas_vXXXX.xlsx`.
+- [x] Provisionar ficheros: fichero extraído del punto 1 en la carpeta `./inputs/beeline-approvals` y copia del excel de delivery (con los cálculos actualizados en la pestaña Timecards Aprobadas) en la carpeta `./inputs`
+- [x] Asignar correctamente los parámetros del script de este repo y ejecutar.
+
 **Uso:**
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli validate-beeline-timesheets `
-  --input-json "./inputs/beeline_timesheets_input_2026-10.json" `
+  --input-json "./inputs/beeline-approvals/beeline_timesheets_input_2026-10.json" `
   --control-workbook "./inputs/Delivery_Management_GestionIniciativas.xlsx" `
   --output-file-name "beeline_validation_2026-10"
 ```
