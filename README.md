@@ -193,10 +193,10 @@ misma persona en ambas fuentes.
 
 ```powershell
 .\.venv\Scripts\python.exe -m sprint_cert_automation.cli validate-myte-fortnight `
-  --excel-json ".\out\excel-current-period-cost-hours-excel\excel-cost-hours_2026-09.json" `
-  --myte-json ".\inputs\myte_2026-09_q1.json" `
+  --excel-json ".\inputs\validate-myte-fortnight\excel-cost-hours_2026-10.json" `
+  --myte-json ".\inputs\validate-myte-fortnight\myte-export-10-15-2026.json" `      
   --period-number 1 `
-  --output-file-name "myte_validation_2026-09_q1"
+  --output-file-name "myte_validation_2026-10_q1"
 ```
 
 **Salida fija:** `out/myte-fortnight-validation/<OutputFileName>.json`.
